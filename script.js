@@ -53,7 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const li = document.createElement('li');
         let display_mm = '';
         let display_level = item.level;
-
         if (item.mm === "N/A") {
           display_mm = '';
         } else if (parseFloat(item.mm) === 0) {
@@ -62,15 +61,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           display_mm = `${item.mm} mm`;
         }
-        
         const time_display = item.time ? `（${item.time}）` : '';
         
-        // 【新增功能】建立預報行
         let forecast_html = '';
         if (item.forecast) {
-            let forecast_class = 'forecast-safe'; // 預設為安全色
+            let forecast_class = 'forecast-safe';
             if (item.forecast.includes('%') && parseInt(item.forecast) > 50) {
-                forecast_class = 'forecast-warning'; // 高機率降雨時用警示色
+                forecast_class = 'forecast-warning';
             }
              if (item.forecast.includes('失敗')) {
                 forecast_class = 'forecast-error';
