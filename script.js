@@ -76,9 +76,8 @@ document.addEventListener('DOMContentLoaded', () => {
         earthquakeList.appendChild(li);
       });
     } else {
-      // 如果沒有地震資料，顯示您提議的、更精準的提示文字
       const li = document.createElement('li');
-      li.textContent = '過去 72 小時內蘇花沿線無顯著有感地震。'; // <--- 【修改處】
+      li.textContent = '過去 72 小時內蘇花沿線無顯著有感地震。';
       earthquakeList.appendChild(li);
     }
 
@@ -92,17 +91,18 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // 更新颱風動態
+    // 【修改處】更新颱風動態的邏輯
     if (data.typhoonInfo) {
-      typhoonBox.style.display = 'block';
+      typhoonBox.style.background = '#f3f4f6'; // 恢復正常的背景色
       typhoonBox.innerHTML = `<div><b>${data.typhoonInfo.name}</b></div>
                             <div>${data.typhoonInfo.warning_type}｜更新時間：${data.typhoonInfo.update_time}</div>
                             <div>中心位置：${data.typhoonInfo.location}　最大風速：${data.typhoonInfo.wind_speed}</div>
                             <div>警報狀態：${data.typhoonInfo.status}</div>
                             <div><img src="${data.typhoonInfo.img_url}" alt="颱風路徑圖" width="100%"></div>`;
     } else {
-      typhoonBox.style.display = 'none';
-      typhoonBox.innerHTML = '目前無颱風警報';
+      // 如果沒有颱風，顯示提示文字，而不是隱藏區塊
+      typhoonBox.style.background = 'none'; // 可以讓背景變透明，看起來更簡潔
+      typhoonBox.innerHTML = '目前暫無颱風警報';
     }
   }
 
