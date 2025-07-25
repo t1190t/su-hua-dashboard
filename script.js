@@ -1,7 +1,7 @@
 // 【‼️請務必修改此處‼️】
 // 請將下方的佔位符文字 'YOUR_RENDER_URL_HERE'，
 // 完整替換成您真實的 Render 後端網址。
-const BACKEND_URL = 'YOUR_RENDER_URL_HERE';
+const BACKEND_URL = 'https://su-hua-dashboard.onrender.com';
 
 // --- 以下程式碼不需要修改 ---
 
