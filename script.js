@@ -19,18 +19,14 @@ document.addEventListener('DOMContentLoaded', () => {
   async function fetchDataAndUpdateDashboard() {
     console.log("正在從後端獲取最新資料...");
     lastUpdateElement.textContent = '資料最後更新時間：讀取中...';
-
     if (BACKEND_URL === 'YOUR_RENDER_URL_HERE' || !BACKEND_URL) {
       alert('錯誤：後端網址尚未在 script.js 中設定！');
       lastUpdateElement.textContent = '錯誤：後端網址尚未設定';
       return;
     }
-
     try {
       const response = await fetch(BACKEND_URL + '/api/dashboard-data');
-      if (!response.ok) {
-        throw new Error(`HTTP 錯誤！ 狀態: ${response.status}`);
-      }
+      if (!response.ok) { throw new Error(`HTTP 錯誤！ 狀態: ${response.status}`); }
       const data = await response.json();
       updateDashboard(data);
     } catch (error) {
@@ -42,7 +38,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateDashboard(data) {
     lastUpdateElement.textContent = `資料最後更新時間：${data.lastUpdate}`;
-
     radarImage.src = BACKEND_URL + '/api/radar-image';
     radarImage.onerror = () => { radarImage.alt = '雷達圖載入失敗'; };
 
@@ -51,9 +46,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (data.rainInfo && data.rainInfo.length > 0) {
       data.rainInfo.forEach(item => {
         const li = document.createElement('li');
-        const mm_display = item.mm === "N/A" ? "" : `${item.mm} mm`;
-        // 【修改處】將 item.time 正確顯示出來
-        li.innerHTML = `${item.location}：<span class="rain-mm ${item.class}">${mm_display}</span> ${item.level} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span>`;
+        let display_mm = '';
+        let display_level = item.level;
+
+        // 【修改處】根據您的要求，更精細地處理顯示邏輯
+        if (item.mm === "N/A") {
+          display_mm = ''; // 測站暫無回報或讀取失敗時，不顯示 mm
+        } else if (parseFloat(item.mm) === 0) {
+          display_mm = '0 mm'; // 雨量為 0 時，顯示 0 mm
+          display_level = '過去 24 小時無降雨'; // 並使用更明確的文字
+        } else {
+          display_mm = `${item.mm} mm`;
+        }
+        
+        const time_display = item.time ? `（${item.time}）` : '';
+        li.innerHTML = `${item.location}：<span class="rain-mm ${item.class}">${display_mm}</span> ${display_level} <span class="data-time">${time_display}</span>`;
         rainList.appendChild(li);
       });
     }
@@ -63,13 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (data.earthquakeInfo && data.earthquakeInfo.length > 0) {
       data.earthquakeInfo.forEach(item => {
         const li = document.createElement('li');
-        // 【修改處】將 item.data_time 正確顯示出來
         li.innerHTML = `<strong>${item.time}</strong>　
-                        震央：${item.location}　
-                        規模：${item.magnitude}　
-                        深度：${item.depth}km　
-                        花蓮縣：${item.hualien_level}級　
-                        宜蘭縣：${item.yilan_level}級　
+                        震央：${item.location}　規模：${item.magnitude}　深度：${item.depth}km　
+                        花蓮縣：${item.hualien_level}級　宜蘭縣：${item.yilan_level}級　
                         <span class="data-time">${item.data_time ? `（${item.data_time}）` : ''}</span>`;
         earthquakeList.appendChild(li);
       });
@@ -84,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
      if (data.roadInfo && data.roadInfo.length > 0) {
       data.roadInfo.forEach(item => {
         const li = document.createElement('li');
-        // 【修改處】將 item.time 正確顯示出來
         li.innerHTML = `${item.section}：<span class="road-status ${item.class}">${item.status}</span> ${item.desc} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span>`;
         roadList.appendChild(li);
       });
@@ -93,7 +95,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // 更新颱風動態
     if (data.typhoonInfo) {
       typhoonBox.style.background = '#f3f4f6';
-      // 【修改處】將 item.update_time 正確顯示出來
       typhoonBox.innerHTML = `<div><b>${data.typhoonInfo.name}</b></div>
                             <div>${data.typhoonInfo.warning_type}｜更新時間：${data.typhoonInfo.update_time}</div>
                             <div>中心位置：${data.typhoonInfo.location}　最大風速：${data.typhoonInfo.wind_speed}</div>
