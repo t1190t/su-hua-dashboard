@@ -5,13 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import warnings
-import pytz # <--- 新增時區函式庫
+import pytz
 
-# 忽略 InsecureRequestWarning 警告
 from urllib3.exceptions import InsecureRequestWarning
 warnings.simplefilter('ignore', InsecureRequestWarning)
 
-# 初始化 FastAPI 應用
 app = FastAPI()
 
 app.add_middleware(
@@ -23,9 +21,8 @@ app.add_middleware(
 )
 
 CWA_API_KEY = os.environ.get('CWA_API_KEY', 'YOUR_API_KEY_IS_NOT_SET')
-TAIPEI_TZ = pytz.timezone('Asia/Taipei') # <--- 設定台灣時區
+TAIPEI_TZ = pytz.timezone('Asia/Taipei')
 
-# --- Helper Functions (與之前相同) ---
 def get_rain_level(value: float) -> tuple[str, str, str]:
     if value < 0: return "資料異常", "rain-red", "資料異常"
     if value > 200: return "🟥 豪大雨", "rain-red", "豪大雨"
@@ -35,10 +32,8 @@ def get_rain_level(value: float) -> tuple[str, str, str]:
     if value > 0: return "🟩 小雨", "rain-green", "小雨"
     return "⬜️ 無雨", "rain-none", "無雨"
 
-# --- API 路由定義 ---
 @app.get("/api/dashboard-data")
 async def get_dashboard_data() -> Dict[str, Any]:
-    # 【修改處】使用台灣時區的現在時間
     current_time = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d %H:%M:%S")
     
     rain_info = await get_cwa_rain_data()
@@ -57,7 +52,6 @@ async def get_dashboard_data() -> Dict[str, Any]:
 
 @app.get("/api/radar-image")
 async def get_radar_image():
-    # ... (此函式與之前相同)
     image_url = "https://www.cwa.gov.tw/Data/radar/CV1_3600.png"
     try:
         response = requests.get(image_url, timeout=10, verify=False)
@@ -67,9 +61,7 @@ async def get_radar_image():
         print(f"Error fetching radar image: {e}")
         return Response(status_code=404)
 
-# --- 資料獲取函式 ---
 async def get_cwa_rain_data() -> List[Dict[str, Any]]:
-    # ... (此函式與之前相同)
     station_ids = {"C0O920": "蘇澳鎮", "C0U9N0": "南澳鄉", "C0Z030": "秀林鄉", "C0T8A0":"新城鄉"}
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
     processed_data = []
@@ -77,7 +69,9 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
         response = requests.get(url, verify=False, timeout=15)
         response.raise_for_status()
         data = response.json()
+        
         stations_data = {station["stationId"]: station for station in data.get("records", {}).get("location", [])}
+        
         for station_id, station_name in station_ids.items():
             station = stations_data.get(station_id)
             if station:
@@ -108,13 +102,15 @@ async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
         response.raise_for_status()
         data = response.json()
         if data.get("records") and data["records"].get("Earthquake"):
-            # 【修改處】使用台灣時區的現在時間
             three_days_ago = datetime.now(TAIPEI_TZ) - timedelta(days=3)
             for quake in data["records"]["Earthquake"]:
                 earthquake_info = quake.get("EarthquakeInfo", {})
+                
                 quake_time_str = earthquake_info.get("OriginTime")
                 if not quake_time_str: continue
+
                 quake_time = datetime.fromisoformat(quake_time_str).astimezone(TAIPEI_TZ)
+                
                 if quake_time >= three_days_ago:
                     epicenter = earthquake_info.get("Epicenter", {})
                     magnitude_info = earthquake_info.get("Magnitude", {})
@@ -144,7 +140,6 @@ async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
     return processed_data
 
 async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
-    # ... (此函式與之前相同)
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/T-A0001-001?Authorization={CWA_API_KEY}"
     try:
         response = requests.get(url, verify=False, timeout=15)
@@ -167,12 +162,15 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
-    # ... (此函式與之前相同)
-    return [ {"section": "蘇澳-南澳", "status": "待查詢...", "class": "road-yellow", "desc": "（正在開發此功能）", "time": ""}, ]
+    return [
+        {"section": "蘇澳-南澳", "status": "待查詢...", "class": "road-yellow", "desc": "（正在開發此功能）", "time": ""},
+        {"section": "南澳-和平", "status": "待查詢...", "class": "road-yellow", "desc": "（正在開發此功能）", "time": ""},
+        {"section": "和平-秀林", "status": "待查詢...", "class": "road-yellow", "desc": "（正在開發此功能）", "time": ""},
+    ]
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend is running with Timezone Fix."}
+    return {"status": "Guardian Angel Dashboard Backend is running with Timestamp Fix."}
 
 @app.head("/")
 def read_root_head():
