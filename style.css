@@ -37,10 +37,15 @@ footer { background: #e0f2fe; margin-top: 40px; padding: 16px 0;}
 
 /* --- 處理無資料或錯誤時的樣式 --- */
 .rain-nodata {
-  color: #94a3b8; /* A muted gray color */
+  color: #94a3b8;
 }
 
 .rain-error {
-  color: #ef4444; /* The same red as .rain-red */
+  color: #ef4444;
   font-weight: bold;
+}
+
+/* --- 新增樣式 --- */
+#composite-radar-image {
+  margin-top: 20px;
 }
