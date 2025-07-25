@@ -78,35 +78,61 @@ async def get_rainfall_map():
         return Response(status_code=404)
 
 # --- 資料獲取函式 ---
+async def get_cwa_rain_forecast() -> Dict[str, str]:
+    location_names = "蘇澳鎮,南澳鄉,秀林鄉,新城鄉"
+    url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091?Authorization={CWA_API_KEY}&locationName={location_names}&elementName=PoP6h"
+    forecasts = {}
+    try:
+        response = requests.get(url, verify=False, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        locations = data.get("records", {}).get("location", [])
+        for loc in locations:
+            loc_name = loc.get("locationName")
+            weather_elements = loc.get("weatherElement", [])
+            pop6h = next((el for el in weather_elements if el.get("elementName") == "PoP6h"), None)
+            if pop6h and pop6h.get("time"):
+                first_forecast_pop = int(pop6h["time"][0]["parameter"]["parameterValue"])
+                if first_forecast_pop <= 10:
+                    forecasts[loc_name] = "無明顯降雨"
+                else:
+                    forecasts[loc_name] = f"{first_forecast_pop}% 機率降雨"
+            else:
+                forecasts[loc_name] = "預報資料異常"
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching rain forecast: {e}")
+        for name in location_names.split(","):
+            forecasts[name] = "預報讀取失敗"
+    return forecasts
+
 async def get_cwa_rain_data() -> List[Dict[str, Any]]:
     station_ids = {"C0O920": "蘇澳鎮", "C0U9N0": "南澳鄉", "C0Z030": "秀林鄉", "C0T8A0":"新城鄉"}
+    forecast_data = await get_cwa_rain_forecast()
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
     processed_data = []
     try:
         response = requests.get(url, verify=False, timeout=15)
         response.raise_for_status()
         data = response.json()
-        
         stations_data = {station["stationId"]: station for station in data.get("records", {}).get("location", [])}
-        
         for station_id, station_name in station_ids.items():
             station = stations_data.get(station_id)
             if station:
-                # 【修改處】找不到時，預設值改為 "0"，代表無雨
                 rain_value_str = next((item["elementValue"] for item in station["weatherElement"] if item["elementName"] == "HOUR_24"), "0")
                 rain_value = float(rain_value_str)
                 obs_time = datetime.fromisoformat(station["time"]["obsTime"]).astimezone(TAIPEI_TZ).strftime("%H:%M")
                 level_text, css_class, _ = get_rain_level(rain_value)
                 processed_data.append({
                     "location": station_name, "mm": rain_value, "class": css_class,
-                    "level": level_text, "time": obs_time
+                    "level": level_text, "time": obs_time,
+                    "forecast": forecast_data.get(station_name, "預報讀取失敗")
                 })
             else:
-                processed_data.append({ "location": station_name, "mm": "N/A", "class": "rain-nodata", "level": "測站暫無回報", "time": "" })
+                processed_data.append({ "location": station_name, "mm": "N/A", "class": "rain-nodata", "level": "測站暫無回報", "time": "", "forecast": forecast_data.get(station_name, "N/A") })
     except requests.exceptions.RequestException as e:
         print(f"Error fetching rain data: {e}")
         for station_name in station_ids.values():
-             processed_data.append({"location": station_name, "mm": "N/A", "class": "rain-error", "level": "讀取失敗", "time": ""})
+             processed_data.append({"location": station_name, "mm": "N/A", "class": "rain-error", "level": "讀取失敗", "time": "", "forecast": "N/A"})
     return processed_data
 
 async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
@@ -204,9 +230,10 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
             results[section_name] = { "section": section_name, "status": "讀取失敗", "class": "road-red", "desc": "", "time": "" }
     return list(results.values())
 
+
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend is running with Final UX Fix."}
+    return {"status": "Guardian Angel Dashboard Backend v2.0 (Rain Forecast) is running."}
 
 @app.head("/")
 def read_root_head():
