@@ -8,11 +8,9 @@ import warnings
 import pytz
 from bs4 import BeautifulSoup
 
-# 忽略 InsecureRequestWarning 警告
 from urllib3.exceptions import InsecureRequestWarning
 warnings.simplefilter('ignore', InsecureRequestWarning)
 
-# 初始化 FastAPI 應用
 app = FastAPI()
 
 app.add_middleware(
@@ -26,7 +24,6 @@ app.add_middleware(
 CWA_API_KEY = os.environ.get('CWA_API_KEY', 'YOUR_API_KEY_IS_NOT_SET')
 TAIPEI_TZ = pytz.timezone('Asia/Taipei')
 
-# --- Helper Functions ---
 def get_rain_level(value: float) -> tuple[str, str, str]:
     if value < 0: return "資料異常", "rain-red", "資料異常"
     if value > 200: return "🟥 豪大雨", "rain-red", "豪大雨"
@@ -36,22 +33,16 @@ def get_rain_level(value: float) -> tuple[str, str, str]:
     if value > 0: return "🟩 小雨", "rain-green", "小雨"
     return "⬜️ 無雨", "rain-none", "無雨"
 
-# --- API 路由定義 ---
 @app.get("/api/dashboard-data")
 async def get_dashboard_data() -> Dict[str, Any]:
     current_time = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d %H:%M:%S")
-    
     rain_info = await get_cwa_rain_data()
     earthquake_info = await get_cwa_earthquake_data()
     typhoon_info = await get_cwa_typhoon_data()
     road_info = await get_suhua_road_data()
-
     dashboard_data = {
-      "lastUpdate": current_time,
-      "rainInfo": rain_info,
-      "earthquakeInfo": earthquake_info,
-      "roadInfo": road_info,
-      "typhoonInfo": typhoon_info
+      "lastUpdate": current_time, "rainInfo": rain_info, "earthquakeInfo": earthquake_info,
+      "roadInfo": road_info, "typhoonInfo": typhoon_info
     }
     return dashboard_data
 
@@ -66,21 +57,17 @@ async def get_radar_image():
         print(f"Error fetching radar image: {e}")
         return Response(status_code=404)
 
-# 【新增功能】代領雷達合成回波圖
-@app.get("/api/composite-radar-image")
-async def get_composite_radar_image():
-    # 【修改處】更新為氣象署最新的雷達合成圖網址
-    image_url = "https://www.cwa.gov.tw/Data/satellite/LCC_IR1_CR_2750/LCC_IR1_CR_2750.jpg"
+@app.get("/api/rainfall-map")
+async def get_rainfall_map():
+    image_url = "https://www.cwa.gov.tw/Data/rainfall/QZJ_24h_N.png"
     try:
         response = requests.get(image_url, timeout=10, verify=False)
         response.raise_for_status()
-        return Response(content=response.content, media_type="image/jpeg")
+        return Response(content=response.content, media_type="image/png")
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching composite radar image: {e}")
+        print(f"Error fetching rainfall map: {e}")
         return Response(status_code=404)
 
-
-# --- 資料獲取函式 ---
 async def get_cwa_rain_data() -> List[Dict[str, Any]]:
     station_ids = {"C0O920": "蘇澳鎮", "C0U9N0": "南澳鄉", "C0Z030": "秀林鄉", "C0T8A0":"新城鄉"}
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
@@ -89,9 +76,7 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
         response = requests.get(url, verify=False, timeout=15)
         response.raise_for_status()
         data = response.json()
-        
         stations_data = {station["stationId"]: station for station in data.get("records", {}).get("location", [])}
-        
         for station_id, station_name in station_ids.items():
             station = stations_data.get(station_id)
             if station:
@@ -100,8 +85,7 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
                 obs_time = datetime.fromisoformat(station["time"]["obsTime"]).astimezone(TAIPEI_TZ).strftime("%H:%M")
                 level_text, css_class, _ = get_rain_level(rain_value)
                 processed_data.append({
-                    "location": station_name, "mm": rain_value, "class": css_class,
-                    "level": level_text, "time": obs_time
+                    "location": station_name, "mm": rain_value, "class": css_class, "level": level_text, "time": obs_time
                 })
             else:
                 processed_data.append({ "location": station_name, "mm": "N/A", "class": "rain-nodata", "level": "測站暫無回報", "time": "" })
@@ -178,16 +162,13 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
     url = "https://www.1968services.tw/pbs-incident?region=e&page=1"
     sections = ["蘇澳-南澳", "南澳-和平", "和平-秀林"]
     results = {name: {"section": name, "status": "正常通行", "class": "road-green", "desc": "", "time": ""} for name in sections}
-    
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'lxml')
-        
         incidents = soup.find_all('div', class_='incident-item')
         update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
-
         for incident in incidents:
             content = " ".join(incident.get_text().split())
             if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
@@ -197,7 +178,6 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
                 elif "施工" in content: status = "施工"; css_class = "road-yellow"
                 elif "封閉" in content: status = "封閉"
                 elif "事故" in content: status = "事故"
-
                 if any(keyword in content for keyword in ["蘇澳", "東澳"]):
                     results["蘇澳-南澳"].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
                 if any(keyword in content for keyword in ["南澳", "和平", "武塔"]):
@@ -208,12 +188,11 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
         print(f"Error fetching road data: {e}")
         for section_name in sections:
             results[section_name] = { "section": section_name, "status": "讀取失敗", "class": "road-red", "desc": "", "time": "" }
-            
     return list(results.values())
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend is running with Full Feature."}
+    return {"status": "Guardian Angel Dashboard Backend is running with Final Features."}
 
 @app.head("/")
 def read_root_head():
