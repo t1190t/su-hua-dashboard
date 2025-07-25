@@ -39,7 +39,7 @@ footer { background: #e0f2fe; margin-top: 40px; padding: 16px 0;}
 .rain-error { color: #ef4444; font-weight: bold; }
 #rainfall-map-image { margin-top: 20px; }
 
-/* --- 【新增功能】預報行樣式 --- */
+/* --- 預報行樣式 --- */
 .forecast-line {
     font-size: 0.9em;
     padding-left: 10px;
