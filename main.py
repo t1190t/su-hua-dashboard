@@ -68,63 +68,35 @@ async def get_radar_image():
 
 # --- 資料獲取函式 ---
 async def get_cwa_rain_data() -> List[Dict[str, Any]]:
-    # 更換為更穩定的鄉鎮觀測API (宜蘭縣、花蓮縣)
-    location_names = "蘇澳鎮,南澳鄉,秀林鄉,新城鄉"
-    url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091?Authorization={CWA_API_KEY}&locationName={location_names}"
+    #  reverted to the most stable API endpoint
+    station_ids = {"C0O920": "蘇澳鎮", "C0U9N0": "南澳鄉", "C0Z030": "秀林鄉", "C0T8A0":"新城鄉"}
+    url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
     processed_data = []
-    
     try:
         response = requests.get(url, verify=False, timeout=15)
         response.raise_for_status()
         data = response.json()
         
-        locations = data.get("records", {}).get("location", [])
-        for loc in locations:
-            station_name = loc.get("locationName")
-            weather_elements = loc.get("weatherElement", [])
-            
-            # 找到24小時累積雨量(elementName 'PoP24h' or similar might not exist, we need to calculate it)
-            # This API gives 3-hour forecasts. Let's find observed rainfall instead from O-A0001-001
-            # Sticking to a simpler, more direct observation API is better. Reverting to O-A0001-001.
-            
-            # Let's use a new approach with a more reliable station data API
-            station_obs_url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization={CWA_API_KEY}&elementName=RAIN,HOUR_24"
-            obs_response = requests.get(station_obs_url, verify=False, timeout=15)
-            obs_response.raise_for_status()
-            obs_data = obs_response.json()
-
-            station_map = {"蘇澳鎮": "蘇澳", "南澳鄉": "南澳", "秀林鄉": "和中", "新城鄉": "新城"}
-            target_stations = station_map.values()
-            
-            found_stations = {name: {} for name in location_names.split(',')}
-            
-            for station in obs_data.get("records", {}).get("location", []):
-                s_name = station.get("locationName")
-                if s_name in target_stations:
-                    rain_value = float(next((el["weatherElement"][1].get("elementValue", "-1") for el in station["time"] if "weatherElement" in el and len(el["weatherElement"]) > 1), "-1"))
-                    obs_time = datetime.fromisoformat(station["time"][0]["obsTime"]).astimezone(TAIPEI_TZ).strftime("%H:%M")
-                    
-                    # Map back to township name
-                    for township, station_lookup in station_map.items():
-                        if station_lookup == s_name:
-                             found_stations[township] = {"rain": rain_value, "time": obs_time}
-
-            for township, data in found_stations.items():
-                if data:
-                    level_text, css_class, _ = get_rain_level(data["rain"])
-                    processed_data.append({
-                        "location": township, "mm": data["rain"], "class": css_class,
-                        "level": level_text, "time": data["time"]
-                    })
-                else:
-                    processed_data.append({ "location": township, "mm": "N/A", "class": "rain-nodata", "level": "測站暫無回報", "time": "" })
-
+        stations_data = {station["stationId"]: station for station in data.get("records", {}).get("location", [])}
+        
+        for station_id, station_name in station_ids.items():
+            station = stations_data.get(station_id)
+            if station:
+                rain_value_str = next((item["elementValue"] for item in station["weatherElement"] if item["elementName"] == "HOUR_24"), "-1")
+                rain_value = float(rain_value_str)
+                obs_time = datetime.fromisoformat(station["time"]["obsTime"]).astimezone(TAIPEI_TZ).strftime("%H:%M")
+                level_text, css_class, _ = get_rain_level(rain_value)
+                processed_data.append({
+                    "location": station_name, "mm": rain_value, "class": css_class,
+                    "level": level_text, "time": obs_time
+                })
+            else:
+                processed_data.append({ "location": station_name, "mm": "N/A", "class": "rain-nodata", "level": "測站暫無回報", "time": "" })
     except requests.exceptions.RequestException as e:
         print(f"Error fetching rain data: {e}")
-        for station_name in location_names.split(','):
+        for station_name in station_ids.values():
              processed_data.append({"location": station_name, "mm": "N/A", "class": "rain-error", "level": "讀取失敗", "time": ""})
     return processed_data
-
 
 async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/E-A0015-001?Authorization={CWA_API_KEY}&limit=30"
@@ -190,14 +162,13 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
-    # Plan B: 爬取警廣即時路況
     url = "https://www.1968services.tw/pbs-incident?region=e&page=1"
     sections = ["蘇澳-南澳", "南澳-和平", "和平-秀林"]
     results = {name: {"section": name, "status": "正常通行", "class": "road-green", "desc": "", "time": ""} for name in sections}
     
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}
-        response = requests.get(url, headers=headers, timeout=10)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'lxml')
         
@@ -205,33 +176,21 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
         update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
 
         for incident in incidents:
-            content = incident.get_text()
-            if "台9線" in content or "蘇花" in content or "台9丁線" in content:
-                # 簡單判斷影響的路段
-                status = "事件"
-                css_class = "road-red"
+            content = " ".join(incident.get_text().split()) # Normalize whitespace
+            if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
+                status = "事件"; css_class = "road-red"
                 if "坍方" in content: status = "坍方"
                 elif "落石" in content: status = "落石"
                 elif "施工" in content: status = "施工"; css_class = "road-yellow"
                 elif "封閉" in content: status = "封閉"
                 elif "事故" in content: status = "事故"
 
-                if "蘇澳" in content or "東澳" in content:
-                    results["蘇澳-南澳"]["status"] = status
-                    results["蘇澳-南澳"]["class"] = css_class
-                    results["蘇澳-南澳"]["desc"] = f"（{content.strip()}）"
-                    results["蘇澳-南澳"]["time"] = update_time
-                elif "南澳" in content or "和平" in content or "武塔" in content:
-                    results["南澳-和平"]["status"] = status
-                    results["南澳-和平"]["class"] = css_class
-                    results["南澳-和平"]["desc"] = f"（{content.strip()}）"
-                    results["南澳-和平"]["time"] = update_time
-                elif "和平" in content or "崇德" in content or "清水" in content:
-                    results["和平-秀林"]["status"] = status
-                    results["和平-秀林"]["class"] = css_class
-                    results["和平-秀林"]["desc"] = f"（{content.strip()}）"
-                    results["和平-秀林"]["time"] = update_time
-
+                if any(keyword in content for keyword in ["蘇澳", "東澳"]):
+                    results["蘇澳-南澳"].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
+                if any(keyword in content for keyword in ["南澳", "和平", "武塔"]):
+                    results["南澳-和平"].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
+                if any(keyword in content for keyword in ["和平", "崇德", "清水"]):
+                    results["和平-秀林"].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
     except requests.exceptions.RequestException as e:
         print(f"Error fetching road data: {e}")
         for section_name in sections:
@@ -239,10 +198,9 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
             
     return list(results.values())
 
-
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend is running with Final Fixes."}
+    return {"status": "Guardian Angel Dashboard Backend is running with Final Fixes v2."}
 
 @app.head("/")
 def read_root_head():
