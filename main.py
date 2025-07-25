@@ -7,11 +7,9 @@ from datetime import datetime, timedelta
 import warnings
 import pytz
 
-# 忽略 InsecureRequestWarning 警告
 from urllib3.exceptions import InsecureRequestWarning
 warnings.simplefilter('ignore', InsecureRequestWarning)
 
-# 初始化 FastAPI 應用
 app = FastAPI()
 
 app.add_middleware(
@@ -25,7 +23,6 @@ app.add_middleware(
 CWA_API_KEY = os.environ.get('CWA_API_KEY', 'YOUR_API_KEY_IS_NOT_SET')
 TAIPEI_TZ = pytz.timezone('Asia/Taipei')
 
-# --- Helper Functions ---
 def get_rain_level(value: float) -> tuple[str, str, str]:
     if value < 0: return "資料異常", "rain-red", "資料異常"
     if value > 200: return "🟥 豪大雨", "rain-red", "豪大雨"
@@ -35,7 +32,6 @@ def get_rain_level(value: float) -> tuple[str, str, str]:
     if value > 0: return "🟩 小雨", "rain-green", "小雨"
     return "⬜️ 無雨", "rain-none", "無雨"
 
-# --- API 路由定義 ---
 @app.get("/api/dashboard-data")
 async def get_dashboard_data() -> Dict[str, Any]:
     current_time = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d %H:%M:%S")
@@ -65,7 +61,6 @@ async def get_radar_image():
         print(f"Error fetching radar image: {e}")
         return Response(status_code=404)
 
-# --- 資料獲取函式 ---
 async def get_cwa_rain_data() -> List[Dict[str, Any]]:
     station_ids = {"C0O920": "蘇澳鎮", "C0U9N0": "南澳鄉", "C0Z030": "秀林鄉", "C0T8A0":"新城鄉"}
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
@@ -74,9 +69,7 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
         response = requests.get(url, verify=False, timeout=15)
         response.raise_for_status()
         data = response.json()
-        
         stations_data = {station["stationId"]: station for station in data.get("records", {}).get("location", [])}
-        
         for station_id, station_name in station_ids.items():
             station = stations_data.get(station_id)
             if station:
@@ -160,27 +153,15 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
-    # 蘇花公路三個路段的代表ID (從168網站分析得出)
-    sections = {
-        "S00111": "蘇澳-南澳",
-        "S00112": "南澳-和平",
-        "S00113": "和平-秀林",
-    }
-    # 這是 168.thb.gov.tw 網站使用的內部 API
+    sections = { "S00111": "蘇澳-南澳", "S00112": "南澳-和平", "S00113": "和平-秀林" }
     url = "https://168.thb.gov.tw/api/thb/section/status/GROUP/L2"
-    processed_data = []
-    
-    # 建立一個預設狀態，確保所有路段都會顯示
     results = {name: {"section": name, "status": "正常通行", "class": "road-green", "desc": "", "time": ""} for name in sections.values()}
-
     try:
-        response = requests.get(url, timeout=10)
+        # 【修改處】加上 verify=False 來解決 SSL 錯誤
+        response = requests.get(url, timeout=10, verify=False)
         response.raise_for_status()
         data = response.json()
-
         update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
-
-        # 處理道路事件 (落石、施工等)
         if data.get("features"):
             for event in data["features"]:
                 props = event.get("properties", {})
@@ -189,26 +170,19 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
                     section_name = sections[section_id]
                     event_type = props.get("event_type", "不明事件")
                     description = props.get("description", "")
-                    
                     results[section_name]["status"] = event_type
-                    results[section_name]["class"] = "road-red" # 任何事件都標為紅色警示
+                    results[section_name]["class"] = "road-red"
                     results[section_name]["desc"] = f"（{description}）"
                     results[section_name]["time"] = update_time
-
-        processed_data = list(results.values())
-        
     except requests.exceptions.RequestException as e:
         print(f"Error fetching road data: {e}")
         for section_name in sections.values():
-            processed_data.append({
-                "section": section_name, "status": "讀取失敗", "class": "road-red", "desc": "", "time": ""
-            })
-
-    return processed_data
+            results[section_name] = { "section": section_name, "status": "讀取失敗", "class": "road-red", "desc": "", "time": "" }
+    return list(results.values())
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend is running with Full Feature."}
+    return {"status": "Guardian Angel Dashboard Backend is running with Final Fixes."}
 
 @app.head("/")
 def read_root_head():
