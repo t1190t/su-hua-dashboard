@@ -1,0 +1,35 @@
+body {
+  font-family: "Noto Sans TC", Arial, sans-serif;
+  margin: 0; background: #f8fafc; color: #1e293b;
+}
+header { background: #0891b2; color: #fff; padding: 18px 0 10px 0; text-align: center;}
+header h1 { margin: 0; font-size: 1.6rem;}
+#updateBtn { background: #fff; color: #0891b2; border: none; border-radius: 6px; padding: 6px 16px; font-size: 1rem; margin: 8px;}
+.dashboard { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin: 24px 0;}
+.column { background: #fff; border-radius: 14px; box-shadow: 0 2px 16px #e0e0e0; flex: 1 1 280px; max-width: 370px; padding: 20px 18px; min-width: 270px;}
+.column h2 { border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 10px; font-size: 1.18rem;}
+ul { padding-left: 0; list-style: none;}
+li { margin-bottom: 12px; }
+.rain-mm { font-weight: bold;}
+.rain-green { color: #16a34a;}
+.rain-blue { color: #2563eb;}
+.rain-yellow { color: #eab308;}
+.rain-orange { color: #f59e42;}
+.rain-red { color: #ef4444;}
+.road-status { padding: 2px 8px; border-radius: 8px; font-weight: bold;}
+.road-green { background: #d1fae5; color: #15803d;}
+.road-yellow { background: #fef9c3; color: #b45309;}
+.road-red { background: #fee2e2; color: #b91c1c;}
+.data-time { color: #888; font-size: 0.92em;}
+.rain-desc { margin: 12px 0 0 0; font-size: 0.98em; color: #555;}
+.radar-img img { border: 1px solid #bbb; margin-top: 8px; border-radius: 8px;}
+.typhoon-box { background: #f3f4f6; border: 1px solid #cbd5e1; border-radius: 8px; margin-top: 14px; padding: 8px 10px;}
+footer { background: #e0f2fe; margin-top: 40px; padding: 16px 0;}
+.changelog { max-width: 860px; margin: auto; }
+.changelog ul { list-style: disc inside; }
+.changelog h2 { font-size: 1.18em; margin-bottom: 10px; }
+.footer-info { text-align: center; font-size: 0.92em; color: #0284c7; margin-top: 18px;}
+@media (max-width: 1000px) {
+  .dashboard { flex-direction: column; gap: 14px; }
+  .column { max-width: 100%; }
+}
