@@ -87,7 +87,6 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
                     "level": level_text, "time": obs_time
                 })
             else:
-                # 【修改處】使用更明確的文字和新的 CSS class
                 processed_data.append({
                     "location": station_name, "mm": "N/A", "class": "rain-nodata",
                     "level": "測站暫無回報", "time": ""
@@ -175,6 +174,7 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
+    # 這是我們下一步要開發的重點
     return [
         {"section": "蘇澳-南澳", "status": "待查詢...", "class": "road-yellow", "desc": "（正在開發此功能）", "time": ""},
         {"section": "南澳-和平", "status": "待查詢...", "class": "road-yellow", "desc": "（正在開發此功能）", "time": ""},
@@ -183,4 +183,13 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend is running with Final UX enhancements."}
+    return {"status": "Guardian Angel Dashboard Backend is running with full data parsing."}
+
+# 【新增功能】告訴 UptimeRobot 我們活著 (處理 HEAD 請求)
+@app.head("/")
+def read_root_head():
+    """
+    This endpoint is specifically for UptimeRobot's HEAD requests.
+    It returns a simple 200 OK response to show the service is live.
+    """
+    return Response(status_code=200)
