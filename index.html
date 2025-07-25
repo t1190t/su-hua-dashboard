@@ -15,8 +15,7 @@
   <main class="dashboard">
     <section class="column">
       <h2>🌧 雨量資訊</h2>
-      <ul id="rain-list">
-        </ul>
+      <ul id="rain-list"></ul>
       <div class="rain-desc">
         分級說明：🟩小雨 1-30mm｜🟦中雨 31-80mm｜🟨大雨 81-130mm｜🟧豪雨 131-200mm｜🟥豪大雨 >200mm
       </div>
@@ -25,56 +24,58 @@
         <img id="radar-image" src="https://via.placeholder.com/350x350.png?text=Loading..." alt="中央氣象署雷達回波圖" width="100%">
       </div>
       <div class="radar-img">
-        <h3>雷達合成回波圖</h3>
-        <img id="composite-radar-image" src="https://via.placeholder.com/350x350.png?text=Loading..." alt="雷達合成回波圖" width="100%">
+        <h3>累積雨量圖</h3>
+        <img id="rainfall-map-image" src="https://via.placeholder.com/350x350.png?text=Loading..." alt="累積雨量圖" width="100%">
       </div>
     </section>
     <section class="column">
       <h2>🌍 地震資訊</h2>
-      <ul id="earthquake-list">
-        </ul>
+      <ul id="earthquake-list"></ul>
     </section>
     <section class="column">
       <h2>🚧 蘇花公路路況</h2>
-      <ul id="road-list">
-        </ul>
+      <ul id="road-list"></ul>
     </section>
     <section class="column">
       <h2>🌀 颱風動態</h2>
-      <div id="typhoon-box" class="typhoon-box">
-        </div>
+      <div id="typhoon-box" class="typhoon-box"></div>
     </section>
   </main>
   <footer>
     <section class="changelog">
       <h2>Change Log（版本紀錄）</h2>
       <ul>
-         <li>
+        <li>
+          <b>v1.4</b> 2025-07-26
+          <ul>
+            <li>【新增】新增全台累積雨量圖。</li>
+            <li>【優化】修正蘇花路況API失效問題，改用警廣路況爬蟲。</li>
+            <li>【優化】修正雨量API穩定性問題。</li>
+          </ul>
+        </li>
+        <li>
           <b>v1.3</b> 2025-07-26
           <ul>
-            <li>資料最後更新時間時區改為台灣時區</li>
-            <li>四欄式儀表板上線，雨量/地震/路況/颱風</li>
-            <li>新增預測雨勢</li>
-            </ul>
-        </li>
-        <li>
-          <b>v1.2</b> 2025-07-25
-          <ul>
-            <li>新增颱風資訊欄位，含自動擷取與路徑圖</li>
-            <li>各資料欄位加上「即時抓取時間」</li>
-            <li>增加「立即更新」按鈕</li>
+            <li>【優化】地震資訊篩選為蘇花沿線震度>=2級。</li>
+            <li>【優化】版面調整為四欄式，並改善無資料時的提示訊息。</li>
           </ul>
         </li>
         <li>
-          <b>v1.1</b> 2025-07-25
+          <b>v1.2</b> 2025-07-24
           <ul>
-            <li>三欄式儀表板上線，含雨量/地震/路況/雷達回波</li>
+            <li>新增颱風資訊欄位、即時抓取時間與手動更新按鈕。</li>
           </ul>
         </li>
         <li>
-          <b>v1.0</b> 2025-07-24
+          <b>v1.1</b> 2025-07-23
           <ul>
-            <li>專案初版發布</li>
+            <li>三欄式儀表板上線，含雨量/地震/路況/雷達回波。</li>
+          </ul>
+        </li>
+        <li>
+          <b>v1.0</b> 2025-07-22
+          <ul>
+            <li>專案初版發布。</li>
           </ul>
         </li>
       </ul>
