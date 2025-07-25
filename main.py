@@ -66,9 +66,21 @@ async def get_radar_image():
         print(f"Error fetching radar image: {e}")
         return Response(status_code=404)
 
+# 【新增功能】代領雷達合成回波圖
+@app.get("/api/composite-radar-image")
+async def get_composite_radar_image():
+    image_url = "https://www.cwa.gov.tw/Data/radar/CREF_3600.png"
+    try:
+        response = requests.get(image_url, timeout=10, verify=False)
+        response.raise_for_status()
+        return Response(content=response.content, media_type="image/png")
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching composite radar image: {e}")
+        return Response(status_code=404)
+
+
 # --- 資料獲取函式 ---
 async def get_cwa_rain_data() -> List[Dict[str, Any]]:
-    #  reverted to the most stable API endpoint
     station_ids = {"C0O920": "蘇澳鎮", "C0U9N0": "南澳鄉", "C0Z030": "秀林鄉", "C0T8A0":"新城鄉"}
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
     processed_data = []
@@ -176,7 +188,7 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
         update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
 
         for incident in incidents:
-            content = " ".join(incident.get_text().split()) # Normalize whitespace
+            content = " ".join(incident.get_text().split())
             if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
                 status = "事件"; css_class = "road-red"
                 if "坍方" in content: status = "坍方"
@@ -200,7 +212,7 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend is running with Final Fixes v2."}
+    return {"status": "Guardian Angel Dashboard Backend is running with Full Feature."}
 
 @app.head("/")
 def read_root_head():
