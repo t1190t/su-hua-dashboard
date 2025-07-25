@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
              if (item.forecast.includes('失敗')) {
                 forecast_class = 'forecast-error';
             }
-            forecast_html = `<div class="forecast-line ${forecast_class}">└── 未来 6 小時預估：${item.forecast}</div>`;
+            forecast_html = `<div class="forecast-line ${forecast_class}">└── 未來 6 小時預估：${item.forecast}</div>`;
         }
 
         li.innerHTML = `<div>${item.location}：<span class="rain-mm ${item.class}">${display_mm}</span> ${display_level} <span class="data-time">${time_display}</span></div>${forecast_html}`;
