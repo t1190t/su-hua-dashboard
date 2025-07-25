@@ -68,7 +68,6 @@ async def get_radar_image():
 
 @app.get("/api/rainfall-map")
 async def get_rainfall_map():
-    # 【修改處】採用您找到的、更穩定的 1968 內部圖片來源
     image_url = "https://c1.1968services.tw/map-data/O-A0040-002.jpg"
     try:
         response = requests.get(image_url, timeout=10, verify=False)
@@ -78,7 +77,7 @@ async def get_rainfall_map():
         print(f"Error fetching rainfall map: {e}")
         return Response(status_code=404)
 
-# --- 資料獲取函式 (以下均無變動) ---
+# --- 資料獲取函式 ---
 async def get_cwa_rain_data() -> List[Dict[str, Any]]:
     station_ids = {"C0O920": "蘇澳鎮", "C0U9N0": "南澳鄉", "C0Z030": "秀林鄉", "C0T8A0":"新城鄉"}
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
@@ -87,11 +86,14 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
         response = requests.get(url, verify=False, timeout=15)
         response.raise_for_status()
         data = response.json()
+        
         stations_data = {station["stationId"]: station for station in data.get("records", {}).get("location", [])}
+        
         for station_id, station_name in station_ids.items():
             station = stations_data.get(station_id)
             if station:
-                rain_value_str = next((item["elementValue"] for item in station["weatherElement"] if item["elementName"] == "HOUR_24"), "-1")
+                # 【修改處】找不到時，預設值改為 "0"，代表無雨
+                rain_value_str = next((item["elementValue"] for item in station["weatherElement"] if item["elementName"] == "HOUR_24"), "0")
                 rain_value = float(rain_value_str)
                 obs_time = datetime.fromisoformat(station["time"]["obsTime"]).astimezone(TAIPEI_TZ).strftime("%H:%M")
                 level_text, css_class, _ = get_rain_level(rain_value)
@@ -204,7 +206,7 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend is running with Final Fixes v2."}
+    return {"status": "Guardian Angel Dashboard Backend is running with Final UX Fix."}
 
 @app.head("/")
 def read_root_head():
