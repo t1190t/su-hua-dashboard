@@ -1,9 +1,5 @@
 // 【‼️請務必修改此處‼️】
-// 請將下方的佔位符文字 'YOUR_RENDER_URL_HERE'，
-// 完整替換成您真實的 Render 後端網址。
 const BACKEND_URL = 'https://su-hua-dashboard.onrender.com';
-
-// --- 以下程式碼不需要修改 ---
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -56,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
       data.rainInfo.forEach(item => {
         const li = document.createElement('li');
         const mm_display = item.mm === "N/A" ? "" : `${item.mm} mm`;
+        // 【修改處】將 item.time 正確顯示出來
         li.innerHTML = `${item.location}：<span class="rain-mm ${item.class}">${mm_display}</span> ${item.level} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span>`;
         rainList.appendChild(li);
       });
@@ -66,13 +63,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (data.earthquakeInfo && data.earthquakeInfo.length > 0) {
       data.earthquakeInfo.forEach(item => {
         const li = document.createElement('li');
+        // 【修改處】將 item.data_time 正確顯示出來
         li.innerHTML = `<strong>${item.time}</strong>　
                         震央：${item.location}　
                         規模：${item.magnitude}　
                         深度：${item.depth}km　
                         花蓮縣：${item.hualien_level}級　
                         宜蘭縣：${item.yilan_level}級　
-                        <span class="data-time">（${item.data_time}）</span>`;
+                        <span class="data-time">${item.data_time ? `（${item.data_time}）` : ''}</span>`;
         earthquakeList.appendChild(li);
       });
     } else {
@@ -86,22 +84,23 @@ document.addEventListener('DOMContentLoaded', () => {
      if (data.roadInfo && data.roadInfo.length > 0) {
       data.roadInfo.forEach(item => {
         const li = document.createElement('li');
-        li.innerHTML = `${item.section}：<span class="road-status ${item.class}">${item.status}</span> ${item.desc} <span class="data-time">（${item.time}）</span>`;
+        // 【修改處】將 item.time 正確顯示出來
+        li.innerHTML = `${item.section}：<span class="road-status ${item.class}">${item.status}</span> ${item.desc} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span>`;
         roadList.appendChild(li);
       });
     }
 
-    // 【修改處】更新颱風動態的邏輯
+    // 更新颱風動態
     if (data.typhoonInfo) {
-      typhoonBox.style.background = '#f3f4f6'; // 恢復正常的背景色
+      typhoonBox.style.background = '#f3f4f6';
+      // 【修改處】將 item.update_time 正確顯示出來
       typhoonBox.innerHTML = `<div><b>${data.typhoonInfo.name}</b></div>
                             <div>${data.typhoonInfo.warning_type}｜更新時間：${data.typhoonInfo.update_time}</div>
                             <div>中心位置：${data.typhoonInfo.location}　最大風速：${data.typhoonInfo.wind_speed}</div>
                             <div>警報狀態：${data.typhoonInfo.status}</div>
                             <div><img src="${data.typhoonInfo.img_url}" alt="颱風路徑圖" width="100%"></div>`;
     } else {
-      // 如果沒有颱風，顯示提示文字，而不是隱藏區塊
-      typhoonBox.style.background = 'none'; // 可以讓背景變透明，看起來更簡潔
+      typhoonBox.style.background = 'none';
       typhoonBox.innerHTML = '目前暫無颱風警報';
     }
   }
