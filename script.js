@@ -1,26 +1,37 @@
-// 等待整個網頁的 HTML 結構都載入完成後，再執行裡面的程式碼
+// 【‼️請務必修改此處‼️】
+// 請將下方的佔位符文字 'YOUR_RENDER_URL_HERE'，
+// 完整替換成您真實的 Render 後端網址。
+const BACKEND_URL = 'https://su-hua-dashboard.onrender.com';
+
+// --- 以下程式碼不需要修改 ---
+
 document.addEventListener('DOMContentLoaded', () => {
 
-  // 您的後端服務網址
-  const BACKEND_URL = 'https://su-hua-dashboard.onrender.com';
-
-  // 找到「立即更新」按鈕
   const updateBtn = document.getElementById('updateBtn');
+  const lastUpdateElement = document.getElementById('lastUpdate');
+  const rainList = document.getElementById('rain-list');
+  const radarImage = document.getElementById('radar-image');
+  const earthquakeList = document.getElementById('earthquake-list');
+  const roadList = document.getElementById('road-list');
+  const typhoonBox = document.getElementById('typhoon-box');
 
-  // 為按鈕加上點擊事件
   updateBtn.addEventListener('click', () => {
     alert('已送出立即更新指令，資料將於1分鐘內刷新！');
     fetchDataAndUpdateDashboard();
   });
 
-  // --- 函式定義區 ---
-
-  // 主要功能：從後端取得所有資料並更新整個儀表板
   async function fetchDataAndUpdateDashboard() {
     console.log("正在從後端獲取最新資料...");
-    document.getElementById('lastUpdate').textContent = '資料最後更新時間：讀取中...';
+    lastUpdateElement.textContent = '資料最後更新時間：讀取中...';
+
+    if (BACKEND_URL === 'YOUR_RENDER_URL_HERE' || !BACKEND_URL) {
+      alert('錯誤：後端網址尚未在 script.js 中設定！');
+      lastUpdateElement.textContent = '錯誤：後端網址尚未設定';
+      return;
+    }
+
     try {
-      const response = await fetch(BACKEND_URL);
+      const response = await fetch(BACKEND_URL + '/api/dashboard-data');
       if (!response.ok) {
         throw new Error(`HTTP 錯誤！ 狀態: ${response.status}`);
       }
@@ -28,18 +39,20 @@ document.addEventListener('DOMContentLoaded', () => {
       updateDashboard(data);
     } catch (error) {
       console.error("無法獲取儀表板資料:", error);
-      alert("無法連接後端伺服器，資料讀取失敗！請稍後再試。");
+      alert("無法連接後端伺服器，資料讀取失敗！請檢查後端服務是否正常運作，以及前端網址設定是否正確。");
+      lastUpdateElement.textContent = '資料讀取失敗';
     }
   }
 
-  // 更新整個儀表板的資料
   function updateDashboard(data) {
-    // 更新「最後更新時間」
-    document.getElementById('lastUpdate').textContent = `資料最後更新時間：${data.lastUpdate}`;
+    lastUpdateElement.textContent = `資料最後更新時間：${data.lastUpdate}`;
+
+    // 更新雷達圖
+    radarImage.src = BACKEND_URL + '/api/radar-image';
+    radarImage.onerror = () => { radarImage.alt = '雷達圖載入失敗'; };
 
     // 更新雨量資訊
-    const rainList = document.getElementById('rain-list');
-    rainList.innerHTML = ''; // 先清空列表
+    rainList.innerHTML = '';
     if (data.rainInfo && data.rainInfo.length > 0) {
       data.rainInfo.forEach(item => {
         const li = document.createElement('li');
@@ -48,12 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // 更新雷達回波圖
-    document.getElementById('radar-image').src = data.radarImgUrl;
-
     // 更新地震資訊
-    const earthquakeList = document.getElementById('earthquake-list');
-    earthquakeList.innerHTML = ''; // 先清空列表
+    earthquakeList.innerHTML = '';
     if (data.earthquakeInfo && data.earthquakeInfo.length > 0) {
       data.earthquakeInfo.forEach(item => {
         const li = document.createElement('li');
@@ -69,8 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 更新蘇花路況
-    const roadList = document.getElementById('road-list');
-    roadList.innerHTML = ''; // 先清空列表
+    roadList.innerHTML = '';
      if (data.roadInfo && data.roadInfo.length > 0) {
       data.roadInfo.forEach(item => {
         const li = document.createElement('li');
@@ -80,21 +88,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 更新颱風動態
-    const typhoonBox = document.getElementById('typhoon-box');
     if (data.typhoonInfo) {
-      typhoonBox.style.display = 'block'; // 顯示區塊
+      typhoonBox.style.display = 'block';
       typhoonBox.innerHTML = `<div><b>${data.typhoonInfo.name}</b></div>
                             <div>${data.typhoonInfo.warning_type}｜更新時間：${data.typhoonInfo.update_time}</div>
                             <div>中心位置：${data.typhoonInfo.location}　最大風速：${data.typhoonInfo.wind_speed}</div>
                             <div>警報狀態：${data.typhoonInfo.status}</div>
                             <div><img src="${data.typhoonInfo.img_url}" alt="颱風路徑圖" width="100%"></div>`;
     } else {
-      typhoonBox.style.display = 'none'; // 隱藏區塊
+      typhoonBox.style.display = 'none';
       typhoonBox.innerHTML = '目前無颱風警報';
     }
   }
 
-  // --- 程式執行入口 ---
   // 頁面一載入，就立刻執行一次，獲取真實資料
   fetchDataAndUpdateDashboard();
 });
