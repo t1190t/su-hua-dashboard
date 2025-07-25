@@ -1,7 +1,7 @@
 // 【‼️請務必修改此處‼️】
 // 請將下方的佔位符文字 'YOUR_RENDER_URL_HERE'，
 // 完整替換成您真實的 Render 後端網址。
-const BACKEND_URL = 'https://su-hua-dashboard.onrender.com';
+const BACKEND_URL = 'YOUR_RENDER_URL_HERE';
 
 // --- 以下程式碼不需要修改 ---
 
@@ -47,7 +47,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateDashboard(data) {
     lastUpdateElement.textContent = `資料最後更新時間：${data.lastUpdate}`;
 
-    // 更新雷達圖
     radarImage.src = BACKEND_URL + '/api/radar-image';
     radarImage.onerror = () => { radarImage.alt = '雷達圖載入失敗'; };
 
@@ -56,7 +55,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (data.rainInfo && data.rainInfo.length > 0) {
       data.rainInfo.forEach(item => {
         const li = document.createElement('li');
-        li.innerHTML = `${item.location}：<span class="rain-mm ${item.class}">${item.mm} mm</span> ${item.level} <span class="data-time">（${item.time}）</span>`;
+        // 針對雨量為 N/A 的情況，調整顯示方式
+        const mm_display = item.mm === "N/A" ? "" : `${item.mm} mm`;
+        li.innerHTML = `${item.location}：<span class="rain-mm ${item.class}">${mm_display}</span> ${item.level} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span>`;
         rainList.appendChild(li);
       });
     }
@@ -75,6 +76,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="data-time">（${item.data_time}）</span>`;
         earthquakeList.appendChild(li);
       });
+    } else {
+      // 如果沒有地震資料，顯示提示文字
+      const li = document.createElement('li');
+      li.textContent = '過去 72 小時內無顯著有感地震。';
+      earthquakeList.appendChild(li);
     }
 
     // 更新蘇花路況
@@ -101,6 +107,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 頁面一載入，就立刻執行一次，獲取真實資料
   fetchDataAndUpdateDashboard();
 });
