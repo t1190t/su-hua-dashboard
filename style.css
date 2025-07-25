@@ -35,17 +35,9 @@ footer { background: #e0f2fe; margin-top: 40px; padding: 16px 0;}
   .column { max-width: 100%; }
 }
 
-/* --- 處理無資料或錯誤時的樣式 --- */
-.rain-nodata {
-  color: #94a3b8;
-}
+.rain-nodata { color: #94a3b8; }
+.rain-error { color: #ef4444; font-weight: bold; }
 
-.rain-error {
-  color: #ef4444;
-  font-weight: bold;
-}
-
-/* --- 新增樣式 --- */
-#composite-radar-image {
+#rainfall-map-image {
   margin-top: 20px;
 }
