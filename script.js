@@ -55,7 +55,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (data.rainInfo && data.rainInfo.length > 0) {
       data.rainInfo.forEach(item => {
         const li = document.createElement('li');
-        // 針對雨量為 N/A 的情況，調整顯示方式
         const mm_display = item.mm === "N/A" ? "" : `${item.mm} mm`;
         li.innerHTML = `${item.location}：<span class="rain-mm ${item.class}">${mm_display}</span> ${item.level} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span>`;
         rainList.appendChild(li);
@@ -77,9 +76,9 @@ document.addEventListener('DOMContentLoaded', () => {
         earthquakeList.appendChild(li);
       });
     } else {
-      // 如果沒有地震資料，顯示提示文字
+      // 如果沒有地震資料，顯示您提議的、更精準的提示文字
       const li = document.createElement('li');
-      li.textContent = '過去 72 小時內無顯著有感地震。';
+      li.textContent = '過去 72 小時內蘇花沿線無顯著有感地震。'; // <--- 【修改處】
       earthquakeList.appendChild(li);
     }
 
