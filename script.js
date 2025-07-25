@@ -1,12 +1,15 @@
 // 【‼️請務必修改此處‼️】
 const BACKEND_URL = 'https://su-hua-dashboard.onrender.com';
 
+// --- 以下程式碼不需要修改 ---
+
 document.addEventListener('DOMContentLoaded', () => {
 
   const updateBtn = document.getElementById('updateBtn');
   const lastUpdateElement = document.getElementById('lastUpdate');
   const rainList = document.getElementById('rain-list');
   const radarImage = document.getElementById('radar-image');
+  const compositeRadarImage = document.getElementById('composite-radar-image'); // 新增的圖片元素
   const earthquakeList = document.getElementById('earthquake-list');
   const roadList = document.getElementById('road-list');
   const typhoonBox = document.getElementById('typhoon-box');
@@ -19,14 +22,18 @@ document.addEventListener('DOMContentLoaded', () => {
   async function fetchDataAndUpdateDashboard() {
     console.log("正在從後端獲取最新資料...");
     lastUpdateElement.textContent = '資料最後更新時間：讀取中...';
+
     if (BACKEND_URL === 'YOUR_RENDER_URL_HERE' || !BACKEND_URL) {
       alert('錯誤：後端網址尚未在 script.js 中設定！');
       lastUpdateElement.textContent = '錯誤：後端網址尚未設定';
       return;
     }
+
     try {
       const response = await fetch(BACKEND_URL + '/api/dashboard-data');
-      if (!response.ok) { throw new Error(`HTTP 錯誤！ 狀態: ${response.status}`); }
+      if (!response.ok) {
+        throw new Error(`HTTP 錯誤！ 狀態: ${response.status}`);
+      }
       const data = await response.json();
       updateDashboard(data);
     } catch (error) {
@@ -38,8 +45,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateDashboard(data) {
     lastUpdateElement.textContent = `資料最後更新時間：${data.lastUpdate}`;
+
+    // 更新雷達圖
     radarImage.src = BACKEND_URL + '/api/radar-image';
     radarImage.onerror = () => { radarImage.alt = '雷達圖載入失敗'; };
+
+    // 更新雷達合成回波圖
+    compositeRadarImage.src = BACKEND_URL + '/api/composite-radar-image';
+    compositeRadarImage.onerror = () => { compositeRadarImage.alt = '雷達合成回波圖載入失敗'; };
+
 
     // 更新雨量資訊
     rainList.innerHTML = '';
@@ -48,17 +62,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const li = document.createElement('li');
         let display_mm = '';
         let display_level = item.level;
-
-        // 【修改處】根據您的要求，更精細地處理顯示邏輯
         if (item.mm === "N/A") {
-          display_mm = ''; // 測站暫無回報或讀取失敗時，不顯示 mm
+          display_mm = '';
         } else if (parseFloat(item.mm) === 0) {
-          display_mm = '0 mm'; // 雨量為 0 時，顯示 0 mm
-          display_level = '過去 24 小時無降雨'; // 並使用更明確的文字
+          display_mm = '0 mm';
+          display_level = '過去 24 小時無降雨';
         } else {
           display_mm = `${item.mm} mm`;
         }
-        
         const time_display = item.time ? `（${item.time}）` : '';
         li.innerHTML = `${item.location}：<span class="rain-mm ${item.class}">${display_mm}</span> ${display_level} <span class="data-time">${time_display}</span>`;
         rainList.appendChild(li);
