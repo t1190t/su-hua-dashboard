@@ -116,27 +116,36 @@ async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
                 quake_time = datetime.fromisoformat(quake_time_str)
                 
                 if quake_time >= three_days_ago:
-                    epicenter = earthquake_info.get("Epicenter", {})
-                    magnitude_info = earthquake_info.get("Magnitude", {})
-                    magnitude_value = magnitude_info.get("MagnitudeValue", 0)
-                    report_content = quake.get("ReportContent", "")
-                    report_time_str = ""
-                    if isinstance(report_content, dict):
-                        report_time_str = report_content.get("web", "")
-                    report_time = datetime.fromisoformat(report_time_str).strftime("%H:%M") if report_time_str else ""
-                    
-                    yilan_level = "0"
-                    hualien_level = "0"
+                    yilan_level_str = "0"
+                    hualien_level_str = "0"
                     for area in quake.get("Intensity", {}).get("ShakingArea", []):
-                        if area.get("AreaDesc") == "宜蘭縣": yilan_level = area.get("AreaIntensity", "0")
-                        if area.get("AreaDesc") == "花蓮縣": hualien_level = area.get("AreaIntensity", "0")
+                        if area.get("AreaDesc") == "宜蘭縣": yilan_level_str = area.get("AreaIntensity", "0")
+                        if area.get("AreaDesc") == "花蓮縣": hualien_level_str = area.get("AreaIntensity", "0")
+                    
+                    try:
+                        yilan_level_int = int(yilan_level_str.replace("級", ""))
+                        hualien_level_int = int(hualien_level_str.replace("級", ""))
+                    except ValueError:
+                        yilan_level_int = 0
+                        hualien_level_int = 0
 
-                    processed_data.append({
-                        "time": quake_time.strftime("%Y-%m-%d %H:%M"), "location": epicenter.get("Location", "不明"),
-                        "magnitude": magnitude_value, "depth": earthquake_info.get("FocalDepth", 0),
-                        "hualien_level": hualien_level.replace("級", ""), "yilan_level": yilan_level.replace("級", ""),
-                        "data_time": report_time
-                    })
+                    # 【新增的篩選邏輯】只有當宜蘭或花蓮震度 >= 2級時，才加入資料
+                    if yilan_level_int >= 2 or hualien_level_int >= 2:
+                        epicenter = earthquake_info.get("Epicenter", {})
+                        magnitude_info = earthquake_info.get("Magnitude", {})
+                        magnitude_value = magnitude_info.get("MagnitudeValue", 0)
+                        report_content = quake.get("ReportContent", "")
+                        report_time_str = ""
+                        if isinstance(report_content, dict):
+                            report_time_str = report_content.get("web", "")
+                        report_time = datetime.fromisoformat(report_time_str).strftime("%H:%M") if report_time_str else ""
+                        
+                        processed_data.append({
+                            "time": quake_time.strftime("%Y-%m-%d %H:%M"), "location": epicenter.get("Location", "不明"),
+                            "magnitude": magnitude_value, "depth": earthquake_info.get("FocalDepth", 0),
+                            "hualien_level": str(hualien_level_int), "yilan_level": str(yilan_level_int),
+                            "data_time": report_time
+                        })
     except requests.exceptions.RequestException as e:
         print(f"Error fetching earthquake data: {e}")
     return processed_data
@@ -160,12 +169,13 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
                 }
     except requests.exceptions.RequestException as e:
         if e.response and e.response.status_code == 404:
-            print("No active typhoon warning found (404). This is normal.")
+            pass # This is normal when no typhoon
         else:
             print(f"Error fetching typhoon data: {e}")
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
+    # 這是我們下一步要開發的重點
     return [
         {"section": "蘇澳-南澳", "status": "待查詢...", "class": "road-yellow", "desc": "（正在開發此功能）", "time": ""},
         {"section": "南澳-和平", "status": "待查詢...", "class": "road-yellow", "desc": "（正在開發此功能）", "time": ""},
@@ -174,4 +184,4 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend is running with UX enhancements."}
+    return {"status": "Guardian Angel Dashboard Backend is running with Earthquake Filter."}
