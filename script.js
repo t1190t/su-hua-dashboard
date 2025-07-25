@@ -2,7 +2,7 @@
 document.addEventListener('DOMContentLoaded', () => {
 
   // 您的後端服務網址
-  const BACKEND_URL = 'https://su-hua-dashboard.onrender.com/api/dashboard-data';
+  const BACKEND_URL = 'https://su-hua-dashboard.onrender.com';
 
   // 找到「立即更新」按鈕
   const updateBtn = document.getElementById('updateBtn');
