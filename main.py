@@ -78,36 +78,8 @@ async def get_rainfall_map():
         return Response(status_code=404)
 
 # --- 資料獲取函式 ---
-async def get_cwa_rain_forecast() -> Dict[str, str]:
-    location_names = "蘇澳鎮,南澳鄉,秀林鄉,新城鄉"
-    url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091?Authorization={CWA_API_KEY}&locationName={location_names}&elementName=PoP6h"
-    forecasts = {}
-    try:
-        response = requests.get(url, verify=False, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-        locations = data.get("records", {}).get("location", [])
-        for loc in locations:
-            loc_name = loc.get("locationName")
-            weather_elements = loc.get("weatherElement", [])
-            pop6h = next((el for el in weather_elements if el.get("elementName") == "PoP6h"), None)
-            if pop6h and pop6h.get("time"):
-                first_forecast_pop = int(pop6h["time"][0]["parameter"]["parameterValue"])
-                if first_forecast_pop <= 10:
-                    forecasts[loc_name] = "無明顯降雨"
-                else:
-                    forecasts[loc_name] = f"{first_forecast_pop}% 機率降雨"
-            else:
-                forecasts[loc_name] = "預報資料異常"
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching rain forecast: {e}")
-        for name in location_names.split(","):
-            forecasts[name] = "預報讀取失敗"
-    return forecasts
-
 async def get_cwa_rain_data() -> List[Dict[str, Any]]:
     station_ids = {"C0O920": "蘇澳鎮", "C0U9N0": "南澳鄉", "C0Z030": "秀林鄉", "C0T8A0":"新城鄉"}
-    forecast_data = await get_cwa_rain_forecast()
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
     processed_data = []
     try:
@@ -123,16 +95,14 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
                 obs_time = datetime.fromisoformat(station["time"]["obsTime"]).astimezone(TAIPEI_TZ).strftime("%H:%M")
                 level_text, css_class, _ = get_rain_level(rain_value)
                 processed_data.append({
-                    "location": station_name, "mm": rain_value, "class": css_class,
-                    "level": level_text, "time": obs_time,
-                    "forecast": forecast_data.get(station_name, "預報讀取失敗")
+                    "location": station_name, "mm": rain_value, "class": css_class, "level": level_text, "time": obs_time
                 })
             else:
-                processed_data.append({ "location": station_name, "mm": "N/A", "class": "rain-nodata", "level": "測站暫無回報", "time": "", "forecast": forecast_data.get(station_name, "N/A") })
+                processed_data.append({ "location": station_name, "mm": "N/A", "class": "rain-nodata", "level": "測站暫無回報", "time": "" })
     except requests.exceptions.RequestException as e:
         print(f"Error fetching rain data: {e}")
         for station_name in station_ids.values():
-             processed_data.append({"location": station_name, "mm": "N/A", "class": "rain-error", "level": "讀取失敗", "time": "", "forecast": "N/A"})
+             processed_data.append({"location": station_name, "mm": "N/A", "class": "rain-error", "level": "讀取失敗", "time": ""})
     return processed_data
 
 async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
@@ -169,8 +139,7 @@ async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
                         processed_data.append({
                             "time": quake_time.strftime("%Y-%m-%d %H:%M"), "location": epicenter.get("Location", "不明"),
                             "magnitude": magnitude_value, "depth": earthquake_info.get("FocalDepth", 0),
-                            "hualien_level": str(hualien_level_int), "yilan_level": str(yilan_level_int),
-                            "data_time": report_time
+                            "hualien_level": str(hualien_level_int), "yilan_level": str(yilan_level_int), "data_time": report_time
                         })
     except requests.exceptions.RequestException as e:
         print(f"Error fetching earthquake data: {e}")
@@ -202,6 +171,12 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
     url = "https://www.1968services.tw/pbs-incident?region=e&page=1"
     sections = ["蘇澳-南澳", "南澳-和平", "和平-秀林"]
     results = {name: {"section": name, "status": "正常通行", "class": "road-green", "desc": "", "time": ""} for name in sections}
+    
+    # --- 新增的智慧判斷關鍵字 ---
+    high_risk_keywords = ["封閉", "中斷", "坍方"]
+    downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行"]
+    mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧"]
+    
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=15)
@@ -209,15 +184,30 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
         soup = BeautifulSoup(response.text, 'lxml')
         incidents = soup.find_all('div', class_='incident-item')
         update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
+
         for incident in incidents:
             content = " ".join(incident.get_text().split())
             if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
-                status = "事件"; css_class = "road-red"
-                if "坍方" in content: status = "坍方"
-                elif "落石" in content: status = "落石"
-                elif "施工" in content: status = "施工"; css_class = "road-yellow"
-                elif "封閉" in content: status = "封閉"
-                elif "事故" in content: status = "事故"
+                status = "事件"; css_class = "road-yellow"; is_high_risk = False
+                
+                # 第三步：判斷事件等級
+                for keyword in high_risk_keywords:
+                    if keyword in content:
+                        status = keyword; css_class = "road-red"; is_high_risk = True
+                        break
+                if not is_high_risk:
+                    for keyword in mid_risk_keywords:
+                        if keyword in content:
+                            status = keyword; css_class = "road-yellow"
+                            break
+                
+                # 第四步：語意分析與風險降級
+                has_downgrade_keyword = any(keyword in content for keyword in downgrade_keywords)
+                if is_high_risk and has_downgrade_keyword:
+                    status = f"管制 ({status}改道)"
+                    css_class = "road-yellow" # 風險降級為黃色
+
+                # 第二步：分門別類
                 if any(keyword in content for keyword in ["蘇澳", "東澳"]):
                     results["蘇澳-南澳"].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
                 if any(keyword in content for keyword in ["南澳", "和平", "武塔"]):
@@ -228,12 +218,13 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
         print(f"Error fetching road data: {e}")
         for section_name in sections:
             results[section_name] = { "section": section_name, "status": "讀取失敗", "class": "road-red", "desc": "", "time": "" }
+            
     return list(results.values())
 
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend v2.0 (Rain Forecast) is running."}
+    return {"status": "Guardian Angel Dashboard Backend is running with Smart Road Analysis."}
 
 @app.head("/")
 def read_root_head():
