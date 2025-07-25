@@ -66,20 +66,19 @@ async def get_radar_image():
         print(f"Error fetching radar image: {e}")
         return Response(status_code=404)
 
-# 【修改處】更新為氣象署最新的累積雨量圖網址
 @app.get("/api/rainfall-map")
 async def get_rainfall_map():
-    image_url = "https://www.cwa.gov.tw/Data/rainfall/QPE_12hr_N.png" # 這是12小時累積圖，更新較頻繁
+    # 【修改處】採用您找到的、更穩定的 1968 內部圖片來源
+    image_url = "https://c1.1968services.tw/map-data/O-A0040-002.jpg"
     try:
         response = requests.get(image_url, timeout=10, verify=False)
         response.raise_for_status()
-        return Response(content=response.content, media_type="image/png")
+        return Response(content=response.content, media_type="image/jpeg")
     except requests.exceptions.RequestException as e:
         print(f"Error fetching rainfall map: {e}")
         return Response(status_code=404)
 
-
-# --- 資料獲取函式 ---
+# --- 資料獲取函式 (以下均無變動) ---
 async def get_cwa_rain_data() -> List[Dict[str, Any]]:
     station_ids = {"C0O920": "蘇澳鎮", "C0U9N0": "南澳鄉", "C0Z030": "秀林鄉", "C0T8A0":"新城鄉"}
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
@@ -88,9 +87,7 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
         response = requests.get(url, verify=False, timeout=15)
         response.raise_for_status()
         data = response.json()
-        
         stations_data = {station["stationId"]: station for station in data.get("records", {}).get("location", [])}
-        
         for station_id, station_name in station_ids.items():
             station = stations_data.get(station_id)
             if station:
@@ -177,16 +174,13 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
     url = "https://www.1968services.tw/pbs-incident?region=e&page=1"
     sections = ["蘇澳-南澳", "南澳-和平", "和平-秀林"]
     results = {name: {"section": name, "status": "正常通行", "class": "road-green", "desc": "", "time": ""} for name in sections}
-    
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'lxml')
-        
         incidents = soup.find_all('div', class_='incident-item')
         update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
-
         for incident in incidents:
             content = " ".join(incident.get_text().split())
             if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
@@ -196,7 +190,6 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
                 elif "施工" in content: status = "施工"; css_class = "road-yellow"
                 elif "封閉" in content: status = "封閉"
                 elif "事故" in content: status = "事故"
-
                 if any(keyword in content for keyword in ["蘇澳", "東澳"]):
                     results["蘇澳-南澳"].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
                 if any(keyword in content for keyword in ["南澳", "和平", "武塔"]):
@@ -207,12 +200,11 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
         print(f"Error fetching road data: {e}")
         for section_name in sections:
             results[section_name] = { "section": section_name, "status": "讀取失敗", "class": "road-red", "desc": "", "time": "" }
-            
     return list(results.values())
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend is running with Final Fixes."}
+    return {"status": "Guardian Angel Dashboard Backend is running with Final Fixes v2."}
 
 @app.head("/")
 def read_root_head():
