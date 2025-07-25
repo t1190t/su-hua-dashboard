@@ -73,10 +73,8 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
         response.raise_for_status()
         data = response.json()
         
-        # 建立一個測站資料的字典方便查找
         stations_data = {station["stationId"]: station for station in data.get("records", {}).get("location", [])}
         
-        # 依我們指定的順序來處理，確保每個測站都有顯示
         for station_id, station_name in station_ids.items():
             station = stations_data.get(station_id)
             if station:
@@ -90,18 +88,17 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
                 })
             else:
                 processed_data.append({
-                    "location": station_name, "mm": -1, "class": "rain-red",
-                    "level": "暫無資料", "time": ""
+                    "location": station_name, "mm": "N/A", "class": "",
+                    "level": "數據更新中", "time": ""
                 })
 
     except requests.exceptions.RequestException as e:
         print(f"Error fetching rain data: {e}")
         for station_name in station_ids.values():
-             processed_data.append({"location": station_name, "mm": -1, "class": "", "level": "讀取失敗", "time": ""})
+             processed_data.append({"location": station_name, "mm": "N/A", "class": "", "level": "讀取失敗", "time": ""})
     return processed_data
 
 async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
-    # 請求最近30筆地震，以確保涵蓋三天內的資料
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/E-A0015-001?Authorization={CWA_API_KEY}&limit=30"
     processed_data = []
     try:
@@ -118,7 +115,6 @@ async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
 
                 quake_time = datetime.fromisoformat(quake_time_str)
                 
-                # 只處理三天內的地震
                 if quake_time >= three_days_ago:
                     epicenter = earthquake_info.get("Epicenter", {})
                     magnitude_info = earthquake_info.get("Magnitude", {})
@@ -163,7 +159,6 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
                     "img_url": "https://www.cwa.gov.tw/Data/typhoon/TY_NEWS/TY_NEWS_0.jpg"
                 }
     except requests.exceptions.RequestException as e:
-        # 如果錯誤是 404 Not Found，代表沒有颱風，這是正常情況，不用印出錯誤
         if e.response and e.response.status_code == 404:
             print("No active typhoon warning found (404). This is normal.")
         else:
@@ -171,7 +166,6 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
-    # 下一步開發的重點
     return [
         {"section": "蘇澳-南澳", "status": "待查詢...", "class": "road-yellow", "desc": "（正在開發此功能）", "time": ""},
         {"section": "南澳-和平", "status": "待查詢...", "class": "road-yellow", "desc": "（正在開發此功能）", "time": ""},
@@ -180,4 +174,4 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend is running with optimized data fetching."}
+    return {"status": "Guardian Angel Dashboard Backend is running with UX enhancements."}
