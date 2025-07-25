@@ -69,11 +69,12 @@ async def get_radar_image():
 # 【新增功能】代領雷達合成回波圖
 @app.get("/api/composite-radar-image")
 async def get_composite_radar_image():
-    image_url = "https://www.cwa.gov.tw/Data/radar/CREF_3600.png"
+    # 【修改處】更新為氣象署最新的雷達合成圖網址
+    image_url = "https://www.cwa.gov.tw/Data/satellite/LCC_IR1_CR_2750/LCC_IR1_CR_2750.jpg"
     try:
         response = requests.get(image_url, timeout=10, verify=False)
         response.raise_for_status()
-        return Response(content=response.content, media_type="image/png")
+        return Response(content=response.content, media_type="image/jpeg")
     except requests.exceptions.RequestException as e:
         print(f"Error fetching composite radar image: {e}")
         return Response(status_code=404)
