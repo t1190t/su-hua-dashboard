@@ -87,15 +87,16 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
                     "level": level_text, "time": obs_time
                 })
             else:
+                # 【修改處】使用更明確的文字和新的 CSS class
                 processed_data.append({
-                    "location": station_name, "mm": "N/A", "class": "",
-                    "level": "數據更新中", "time": ""
+                    "location": station_name, "mm": "N/A", "class": "rain-nodata",
+                    "level": "測站暫無回報", "time": ""
                 })
 
     except requests.exceptions.RequestException as e:
         print(f"Error fetching rain data: {e}")
         for station_name in station_ids.values():
-             processed_data.append({"location": station_name, "mm": "N/A", "class": "", "level": "讀取失敗", "time": ""})
+             processed_data.append({"location": station_name, "mm": "N/A", "class": "rain-error", "level": "讀取失敗", "time": ""})
     return processed_data
 
 async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
@@ -116,6 +117,15 @@ async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
                 quake_time = datetime.fromisoformat(quake_time_str)
                 
                 if quake_time >= three_days_ago:
+                    epicenter = earthquake_info.get("Epicenter", {})
+                    magnitude_info = earthquake_info.get("Magnitude", {})
+                    magnitude_value = magnitude_info.get("MagnitudeValue", 0)
+                    report_content = quake.get("ReportContent", "")
+                    report_time_str = ""
+                    if isinstance(report_content, dict):
+                        report_time_str = report_content.get("web", "")
+                    report_time = datetime.fromisoformat(report_time_str).strftime("%H:%M") if report_time_str else ""
+                    
                     yilan_level_str = "0"
                     hualien_level_str = "0"
                     for area in quake.get("Intensity", {}).get("ShakingArea", []):
@@ -129,17 +139,7 @@ async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
                         yilan_level_int = 0
                         hualien_level_int = 0
 
-                    # 【新增的篩選邏輯】只有當宜蘭或花蓮震度 >= 2級時，才加入資料
                     if yilan_level_int >= 2 or hualien_level_int >= 2:
-                        epicenter = earthquake_info.get("Epicenter", {})
-                        magnitude_info = earthquake_info.get("Magnitude", {})
-                        magnitude_value = magnitude_info.get("MagnitudeValue", 0)
-                        report_content = quake.get("ReportContent", "")
-                        report_time_str = ""
-                        if isinstance(report_content, dict):
-                            report_time_str = report_content.get("web", "")
-                        report_time = datetime.fromisoformat(report_time_str).strftime("%H:%M") if report_time_str else ""
-                        
                         processed_data.append({
                             "time": quake_time.strftime("%Y-%m-%d %H:%M"), "location": epicenter.get("Location", "不明"),
                             "magnitude": magnitude_value, "depth": earthquake_info.get("FocalDepth", 0),
@@ -169,13 +169,12 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
                 }
     except requests.exceptions.RequestException as e:
         if e.response and e.response.status_code == 404:
-            pass # This is normal when no typhoon
+            pass
         else:
             print(f"Error fetching typhoon data: {e}")
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
-    # 這是我們下一步要開發的重點
     return [
         {"section": "蘇澳-南澳", "status": "待查詢...", "class": "road-yellow", "desc": "（正在開發此功能）", "time": ""},
         {"section": "南澳-和平", "status": "待查詢...", "class": "road-yellow", "desc": "（正在開發此功能）", "time": ""},
@@ -184,4 +183,4 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard Backend is running with Earthquake Filter."}
+    return {"status": "Guardian Angel Dashboard Backend is running with Final UX enhancements."}
