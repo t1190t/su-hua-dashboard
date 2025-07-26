@@ -201,27 +201,28 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
     url = "https://www.1968services.tw/pbs-incident?region=e&page=1"
     
-    # --- 最終版關鍵字詞庫 (v3) ---
+    # 【修改處】使用我們最終確認的、最完整的關鍵字詞庫 (v3)
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
         "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
-        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "中仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋"]
+        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "中仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
     }
     high_risk_keywords = ["封閉", "中斷", "坍方"]
-    downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行"]
+    downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧"]
     
     results = {name: {"section": name, "status": "正常通行", "class": "road-green", "desc": "", "time": ""} for name in sections.keys()}
     
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'lxml')
+        
         incidents = soup.find_all('div', class_='incident-item')
         update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
 
-        print(f"找到 {len(incidents)} 則路況事件。") # 增加除錯訊息
+        print(f"找到 {len(incidents)} 則路況事件。") # 除錯訊息
 
         for incident in incidents:
             content = " ".join(incident.get_text().split())
@@ -242,18 +243,11 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
                     status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
                 # 第二步：分門別類 (【修改處】移除 break，允許重複歸類)
-                matched = False
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
-                        results[section_name].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
-                        matched = True
-                
-                # 如果沒有匹配到任何具體路段，但確定是蘇花公路事件，則標示全部路段
-                if not matched:
-                    print(f"未分類的蘇花路況: {content}")
-                    for section_name in sections.keys():
-                        if results[section_name]["status"] == "正常通行": # 只更新沒事的路段
-                             results[section_name].update({"status": "全線注意", "class": "road-yellow", "desc": f"（{content}）", "time": update_time})
+                        # 只在該路段為「正常通行」時才更新，避免較舊的 सामान्य 事件覆蓋掉較新的嚴重事件
+                        if results[section_name]["status"] == "正常通行":
+                             results[section_name].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
                         
     except requests.exceptions.RequestException as e:
         print(f"Error fetching road data: {e}")
