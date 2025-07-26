@@ -83,27 +83,35 @@ document.addEventListener('DOMContentLoaded', () => {
       earthquakeList.appendChild(li);
     }
 
-    // 【修改處】升級路況顯示邏輯
+    // 【修改處】升級路況顯示邏輯，以正確處理新的資料結構
     roadList.innerHTML = '';
-    const sections = ["蘇澳-南澳", "南澳-和平", "和平-秀林"];
-    let hasIncident = false;
-    sections.forEach(sectionName => {
-        const incidents = data.roadInfo[sectionName] || [];
-        if (incidents.length > 0) {
-            incidents.forEach(item => {
-                const li = document.createElement('li');
-                li.innerHTML = `${item.section}：<span class="road-status ${item.class}">${item.status}</span> ${item.desc} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span>`;
-                roadList.appendChild(li);
-                hasIncident = true;
-            });
-        }
+    const roadSections = data.roadInfo || {};
+    let totalIncidents = 0;
+    
+    // 我們希望的顯示順序
+    const displayOrder = ["蘇澳-南澳", "南澳-和平", "和平-秀林"];
+
+    displayOrder.forEach(sectionName => {
+      const incidents = roadSections[sectionName] || [];
+      totalIncidents += incidents.length;
+      if (incidents.length > 0) {
+        incidents.forEach(item => {
+          const li = document.createElement('li');
+          // 確保 item.section 存在，修正 undefined 問題
+          const sectionTitle = item.section || sectionName;
+          li.innerHTML = `${sectionTitle}：<span class="road-status ${item.class}">${item.status}</span> ${item.desc} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span>`;
+          roadList.appendChild(li);
+        });
+      }
     });
 
-    if (!hasIncident) {
+    // 如果所有路段都沒有任何事件，才顯示正常通行
+    if (totalIncidents === 0) {
         const li = document.createElement('li');
         li.innerHTML = `蘇澳-秀林 全線：<span class="road-status road-green">正常通行</span>`;
         roadList.appendChild(li);
     }
+
 
     if (data.typhoonInfo) {
       typhoonBox.style.background = '#f3f4f6';
