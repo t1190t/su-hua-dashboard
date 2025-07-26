@@ -199,9 +199,8 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
-    url = "https://www.1968services.tw/pbs-incident?region=e&page=1"
-    
-    # 【修改處】使用我們最終確認的、最完整的關鍵字詞庫 (v3)
+    # 【修改處】改用 1968 網站的內部 API，不再爬蟲
+    url = "https://1968.freeway.gov.tw/api/getIncidents"
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
         "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
@@ -210,26 +209,20 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
     high_risk_keywords = ["封閉", "中斷", "坍方"]
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧"]
-    
     results = {name: {"section": name, "status": "正常通行", "class": "road-green", "desc": "", "time": ""} for name in sections.keys()}
     
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'lxml')
-        
-        incidents = soup.find_all('div', class_='incident-item')
+        incidents = response.json()
         update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
 
-        print(f"找到 {len(incidents)} 則路況事件。") # 除錯訊息
-
         for incident in incidents:
-            content = " ".join(incident.get_text().split())
+            content = incident.get("comment", "")
             if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
                 status = "事件"; css_class = "road-yellow"; is_high_risk = False
                 
-                # 第三步：判斷事件等級
                 for keyword in high_risk_keywords:
                     if keyword in content:
                         status = keyword; css_class = "road-red"; is_high_risk = True; break
@@ -238,14 +231,11 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
                         if keyword in content:
                             status = keyword; css_class = "road-yellow"; break
                 
-                # 第四步：語意分析與風險降級
                 if is_high_risk and any(keyword in content for keyword in downgrade_keywords):
                     status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
-                # 第二步：分門別類 (【修改處】移除 break，允許重複歸類)
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
-                        # 只在該路段為「正常通行」時才更新，避免較舊的 सामान्य 事件覆蓋掉較新的嚴重事件
                         if results[section_name]["status"] == "正常通行":
                              results[section_name].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
                         
@@ -258,7 +248,7 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard FINAL VERSION is running."}
+    return {"status": "Guardian Angel Dashboard FINAL STABLE VERSION is running."}
 
 @app.head("/")
 def read_root_head():
