@@ -199,6 +199,7 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
+    # 【修改處】修正爬蟲 class name 並簡化邏輯
     base_url = "https://www.1968services.tw/pbs-incident?region=e&page="
     pages_to_scrape = [1, 2]
     
@@ -221,8 +222,7 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
             response = requests.get(url, headers=headers, timeout=15)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'lxml')
-            # 【修改處】使用正確的 class name 來尋找路況項目
-            all_incidents.extend(soup.find_all('div', class_='col-12 incident-item'))
+            all_incidents.extend(soup.find_all('div', class_='incident-item')) # 修正了 class name
 
         update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
         print(f"總共找到 {len(all_incidents)} 則路況事件。")
@@ -243,10 +243,9 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
                 if is_high_risk and any(keyword in content for keyword in downgrade_keywords):
                     status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
-                # 【修改處】修正後的、更寬鬆的分類邏輯
+                # 簡化並修正分類邏輯
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
-                        # 只要找到符合的關鍵字，就更新該路段的狀態
                         results[section_name].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
                         
     except requests.exceptions.RequestException as e:
@@ -258,7 +257,7 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard FINAL BUGFIX is running."}
+    return {"status": "Guardian Angel Dashboard FINAL BUGFIX v2 is running."}
 
 @app.head("/")
 def read_root_head():
