@@ -33,7 +33,10 @@
       <ul id="earthquake-list"></ul>
     </section>
     <section class="column">
-      <h2>🚧 蘇花公路路況 (尚在編碼中，結果現僅供參考)</h2>
+      <h2>🚧 蘇花公路路況</h2>
+      <div class="data-source">
+        資料來源：<a href="https://www.1968services.tw/pbs-incident?region=e" target="_blank" rel="noopener noreferrer">警廣即時路況</a>
+      </div>
       <ul id="road-list"></ul>
     </section>
     <section class="column">
@@ -46,11 +49,18 @@
       <h2>Change Log（版本紀錄）</h2>
       <ul>
         <li>
-          <b>v1.4</b> 2025-07-26
+          <b>v3.0 (智慧升級)</b> 2025-07-26
           <ul>
+            <li>【升級】路況分析引擎，可分辨新舊蘇花路段、多事件處理及 partial closure。</li>
+            <li>【新增】加入未來6小時雨量預測功能。</li>
+          </ul>
+        </li>
+        <li>
+          <b>v2.0 (功能完整)</b> 2025-07-26
+          <ul>
+            <li>【主要功能】蘇花公路路況爬蟲分析上線。</li>
             <li>【新增】新增全台累積雨量圖。</li>
-            <li>【優化】修正蘇花路況API失效問題，改用警廣路況爬蟲。</li>
-            <li>【優化】修正雨量API穩定性問題。</li>
+            <li>【優化】修正時區、無資料提示、API穩定性等大量問題。</li>
           </ul>
         </li>
         <li>
