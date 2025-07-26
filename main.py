@@ -199,10 +199,9 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
-    # 【修改處】使用我們最終確認的、最完整的關鍵字詞庫 (v2)
     url = "https://www.1968services.tw/pbs-incident?region=e&page=1"
     
-    # --- 關鍵字詞庫 v2 ---
+    # --- 最終版關鍵字詞庫 (v3) ---
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
         "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
@@ -222,6 +221,8 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
         incidents = soup.find_all('div', class_='incident-item')
         update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
 
+        print(f"找到 {len(incidents)} 則路況事件。") # 增加除錯訊息
+
         for incident in incidents:
             content = " ".join(incident.get_text().split())
             if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
@@ -240,12 +241,19 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
                 if is_high_risk and any(keyword in content for keyword in downgrade_keywords):
                     status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
-                # 第二步：分門別類
+                # 第二步：分門別類 (【修改處】移除 break，允許重複歸類)
+                matched = False
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
                         results[section_name].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
-                        # 找到歸類後就可跳出，避免重複歸類
-                        break
+                        matched = True
+                
+                # 如果沒有匹配到任何具體路段，但確定是蘇花公路事件，則標示全部路段
+                if not matched:
+                    print(f"未分類的蘇花路況: {content}")
+                    for section_name in sections.keys():
+                        if results[section_name]["status"] == "正常通行": # 只更新沒事的路段
+                             results[section_name].update({"status": "全線注意", "class": "road-yellow", "desc": f"（{content}）", "time": update_time})
                         
     except requests.exceptions.RequestException as e:
         print(f"Error fetching road data: {e}")
