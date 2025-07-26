@@ -39,19 +39,21 @@ footer { background: #e0f2fe; margin-top: 40px; padding: 16px 0;}
 .rain-error { color: #ef4444; font-weight: bold; }
 #rainfall-map-image { margin-top: 20px; }
 
-/* --- 預報行樣式 --- */
-.forecast-line {
-    font-size: 0.9em;
-    padding-left: 10px;
-    margin-top: 4px;
+.forecast-line { font-size: 0.9em; padding-left: 10px; margin-top: 4px; }
+.forecast-safe { color: #64748b; }
+.forecast-warning { color: #c2410c; font-weight: bold; }
+.forecast-error { color: #b91c1c; }
+
+/* --- 【新增功能】路況顯示優化 --- */
+.road-desc {
+  font-size: 0.95em;
+  color: #334155;
+  margin-top: 4px;
+  padding-left: 5px;
 }
-.forecast-safe {
-    color: #64748b; /* 灰色 */
-}
-.forecast-warning {
-    color: #c2410c; /* 橘紅色 */
-    font-weight: bold;
-}
-.forecast-error {
-    color: #b91c1c; /* 紅色 */
+.old-road-tag {
+  font-size: 0.9em;
+  font-weight: bold;
+  color: #475569;
+  margin-left: 8px;
 }
