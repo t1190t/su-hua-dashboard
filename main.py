@@ -199,14 +199,13 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
-    # 【修改處】新增多頁爬取邏輯
     base_url = "https://www.1968services.tw/pbs-incident?region=e&page="
-    pages_to_scrape = [1, 2] # 要爬取的頁數
+    pages_to_scrape = [1, 2]
     
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
-        "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道", "中仁隧道"],
-        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
+        "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
+        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "中仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
     }
     high_risk_keywords = ["封閉", "中斷", "坍方"]
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
@@ -217,12 +216,12 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
     
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        # 分別爬取每一頁
         for page in pages_to_scrape:
             url = f"{base_url}{page}"
             response = requests.get(url, headers=headers, timeout=15)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'lxml')
+            # 【修改處】使用正確的 class name 來尋找路況項目
             all_incidents.extend(soup.find_all('div', class_='col-12 incident-item'))
 
         update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
@@ -244,10 +243,11 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
                 if is_high_risk and any(keyword in content for keyword in downgrade_keywords):
                     status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
+                # 【修改處】修正後的、更寬鬆的分類邏輯
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
-                        if results[section_name]["status"] == "正常通行":
-                             results[section_name].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
+                        # 只要找到符合的關鍵字，就更新該路段的狀態
+                        results[section_name].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
                         
     except requests.exceptions.RequestException as e:
         print(f"Error fetching road data: {e}")
@@ -258,7 +258,7 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard FINAL VERSION is running."}
+    return {"status": "Guardian Angel Dashboard FINAL BUGFIX is running."}
 
 @app.head("/")
 def read_root_head():
