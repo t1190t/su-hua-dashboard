@@ -47,17 +47,13 @@ footer { background: #e0f2fe; margin-top: 40px; padding: 16px 0;}
 .road-desc { font-size: 0.95em; color: #334155; margin-top: 4px; padding-left: 5px; }
 .old-road-tag { font-size: 0.9em; font-weight: bold; color: #475569; margin-left: 8px; }
 
-/* --- 【新增功能】資料來源樣式 --- */
-.data-source {
+/* --- 【新增功能】詳細資訊連結樣式 --- */
+.detail-link {
+  margin-left: 8px;
   font-size: 0.9em;
-  color: #64748b;
-  margin-bottom: 10px;
-  text-align: right;
-}
-.data-source a {
   color: #0891b2;
   text-decoration: none;
 }
-.data-source a:hover {
+.detail-link:hover {
   text-decoration: underline;
 }
