@@ -211,7 +211,6 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧", "作業"]
     
-    # 【修改處】資料結構改變：從單一狀態變成事件列表
     results = {name: [] for name in sections.keys()}
     all_incidents = []
     
@@ -227,20 +226,19 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         print(f"總共找到 {len(all_incidents)} 則路況事件容器。")
 
         for incident_container in all_incidents:
-            # 抓取描述文字
             desc_element = incident_container.find('td', text='描述')
             if not desc_element or not desc_element.find_next_sibling('td'): continue
             content = " ".join(desc_element.find_next_sibling('td').get_text().split())
 
-            # 抓取通報時間
             time_element = incident_container.find('td', text='時間')
             report_time = ""
             if time_element and time_element.find_next_sibling('td'):
                 try:
                     report_time_str = time_element.find_next_sibling('td').get_text().strip()
-                    report_time = datetime.strptime(report_time_str, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+                    # 【修改處】格式化為您要求的完整時間格式
+                    report_time = f"通報時間: {datetime.strptime(report_time_str, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d %H:%M')}"
                 except ValueError:
-                    report_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
+                    report_time = f"通報時間: {datetime.now(TAIPEI_TZ).strftime('%Y-%m-%d %H:%M')}"
 
             if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
                 status = "事件"; css_class = "road-yellow"; is_high_risk = False
@@ -256,11 +254,12 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                 if is_high_risk and any(keyword in content for keyword in downgrade_keywords):
                     status = f"管制 ({status}改道)"; css_class = "road-yellow"
                 
-                # 修正後的分類邏輯
                 incident_assigned = False
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
+                        # 【修改處】確保 section_name 也被加入到事件物件中
                         results[section_name].append({
+                            "section": section_name,
                             "status": status,
                             "class": css_class,
                             "desc": f"（{content}）",
@@ -273,7 +272,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                         
     except requests.exceptions.RequestException as e:
         print(f"Error fetching road data: {e}")
-        error_event = { "status": "讀取失敗", "class": "road-red", "desc": "無法連接路況伺服器", "time": "" }
+        error_event = { "section": "全線", "status": "讀取失敗", "class": "road-red", "desc": "無法連接路況伺服器", "time": "" }
         for section_name in sections.keys():
             results[section_name].append(error_event)
             
@@ -281,7 +280,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard FINAL VERSION is running."}
+    return {"status": "Guardian Angel Dashboard FINAL POLISHED VERSION is running."}
 
 @app.head("/")
 def read_root_head():
