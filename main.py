@@ -199,18 +199,23 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
-    # 【修改處】使用我們最終討論的智慧分析邏輯
+    # 【修改處】使用我們最終確認的、最完整的關鍵字詞庫 (v2)
     url = "https://www.1968services.tw/pbs-incident?region=e&page=1"
-    sections = ["蘇澳-南澳", "南澳-和平", "和平-秀林"]
-    results = {name: {"section": name, "status": "正常通行", "class": "road-green", "desc": "", "time": ""} for name in sections}
     
-    # 關鍵字詞庫
+    # --- 關鍵字詞庫 v2 ---
+    sections = {
+        "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
+        "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
+        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "中仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋"]
+    }
     high_risk_keywords = ["封閉", "中斷", "坍方"]
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行"]
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧"]
     
+    results = {name: {"section": name, "status": "正常通行", "class": "road-green", "desc": "", "time": ""} for name in sections.keys()}
+    
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'lxml')
@@ -225,37 +230,33 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
                 # 第三步：判斷事件等級
                 for keyword in high_risk_keywords:
                     if keyword in content:
-                        status = keyword; css_class = "road-red"; is_high_risk = True
-                        break
+                        status = keyword; css_class = "road-red"; is_high_risk = True; break
                 if not is_high_risk:
                     for keyword in mid_risk_keywords:
                         if keyword in content:
-                            status = keyword; css_class = "road-yellow"
-                            break
+                            status = keyword; css_class = "road-yellow"; break
                 
                 # 第四步：語意分析與風險降級
-                has_downgrade_keyword = any(keyword in content for keyword in downgrade_keywords)
-                if is_high_risk and has_downgrade_keyword:
-                    status = f"管制 ({status}改道)"
-                    css_class = "road-yellow"
+                if is_high_risk and any(keyword in content for keyword in downgrade_keywords):
+                    status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
-                # 第二步：分門-類 (包含我們這次新增的關鍵字)
-                if any(keyword in content for keyword in ["蘇澳", "東澳", "東澳隧道"]):
-                    results["蘇澳-南澳"].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
-                if any(keyword in content for keyword in ["南澳", "和平", "武塔", "觀音谷風隧道", "谷風隧道", "中仁隧道", "149K", "153K"]):
-                    results["南澳-和平"].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
-                if any(keyword in content for keyword in ["和平", "崇德", "清水", "匯德隧道", "仁水隧道"]):
-                    results["和平-秀林"].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
+                # 第二步：分門別類
+                for section_name, keywords in sections.items():
+                    if any(keyword in content for keyword in keywords):
+                        results[section_name].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
+                        # 找到歸類後就可跳出，避免重複歸類
+                        break
+                        
     except requests.exceptions.RequestException as e:
         print(f"Error fetching road data: {e}")
-        for section_name in sections:
+        for section_name in sections.keys():
             results[section_name] = { "section": section_name, "status": "讀取失敗", "class": "road-red", "desc": "", "time": "" }
             
     return list(results.values())
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard v2.0 FINAL is running."}
+    return {"status": "Guardian Angel Dashboard FINAL VERSION is running."}
 
 @app.head("/")
 def read_root_head():
