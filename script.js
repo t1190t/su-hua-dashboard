@@ -83,29 +83,29 @@ document.addEventListener('DOMContentLoaded', () => {
       earthquakeList.appendChild(li);
     }
 
-    // 【修改處】升級路況顯示邏輯，以正確處理新的資料結構
+    // 【修改處】升級路況顯示邏輯
     roadList.innerHTML = '';
     const roadSections = data.roadInfo || {};
     let totalIncidents = 0;
-    
-    // 我們希望的顯示順序
     const displayOrder = ["蘇澳-南澳", "南澳-和平", "和平-秀林"];
 
     displayOrder.forEach(sectionName => {
       const incidents = roadSections[sectionName] || [];
-      totalIncidents += incidents.length;
       if (incidents.length > 0) {
+        totalIncidents += incidents.length;
         incidents.forEach(item => {
           const li = document.createElement('li');
-          // 確保 item.section 存在，修正 undefined 問題
+          // 根據 is_old_road 標籤決定是否要加上備註
+          const oldRoadTag = item.is_old_road ? `<span class="old-road-tag">(此為舊蘇花路段)</span>` : "";
           const sectionTitle = item.section || sectionName;
-          li.innerHTML = `${sectionTitle}：<span class="road-status ${item.class}">${item.status}</span> ${item.desc} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span>`;
+          
+          li.innerHTML = `<div>${sectionTitle} ${oldRoadTag}：<span class="road-status ${item.class}">${item.status}</span></div>
+                          <div class="road-desc">${item.desc} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span></div>`;
           roadList.appendChild(li);
         });
       }
     });
 
-    // 如果所有路段都沒有任何事件，才顯示正常通行
     if (totalIncidents === 0) {
         const li = document.createElement('li');
         li.innerHTML = `蘇澳-秀林 全線：<span class="road-status road-green">正常通行</span>`;
