@@ -83,7 +83,6 @@ document.addEventListener('DOMContentLoaded', () => {
       earthquakeList.appendChild(li);
     }
 
-    // 【修改處】升級路況顯示邏輯
     roadList.innerHTML = '';
     const roadSections = data.roadInfo || {};
     let totalIncidents = 0;
@@ -95,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
         totalIncidents += incidents.length;
         incidents.forEach(item => {
           const li = document.createElement('li');
-          // 根據 is_old_road 標籤決定是否要加上備註
           const oldRoadTag = item.is_old_road ? `<span class="old-road-tag">(此為舊蘇花路段)</span>` : "";
           const sectionTitle = item.section || sectionName;
           
