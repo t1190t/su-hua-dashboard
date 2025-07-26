@@ -200,25 +200,15 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
-    # 【修改處】升級為 v8 最終版智慧分析引擎
     base_url = "https://www.1968services.tw/pbs-incident?region=e&page="
     pages_to_scrape = [1, 2]
     
-    # --- v8 數位路線圖 ---
-    new_suhua_tunnels = ["蘇澳隧道", "東澳隧道", "東岳隧道", "觀音隧道", "谷風隧道", "中仁隧道", "仁水隧道", "匯德隧道"]
-    new_suhua_km_ranges = [
-        (104, 113), # 蘇澳-東澳
-        (124, 145), # 南澳-和平
-        (148, 160)  # 和中-崇德
-    ]
-    old_suhua_keywords = ["台9丁線", "清水斷崖", "和平隧道", "和中隧道", "和仁隧道", "大清水隧道", "錦文隧道", "崇德隧道"]
-    
+    # 最終版關鍵字詞庫
     sections = {
-        "蘇澳-南澳": ["蘇澳", "東澳"],
-        "南澳-和平": ["南澳", "武塔", "漢本", "和平"],
-        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "大清水", "清水"]
+        "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
+        "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
+        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "中仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
     }
-    
     high_risk_keywords = ["封閉", "中斷", "坍方"]
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧", "作業"]
@@ -251,8 +241,14 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                     report_time = f"通報時間: {datetime.strptime(report_time_str, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d %H:%M')}"
                 except ValueError:
                     report_time = f"通報時間: {datetime.now(TAIPEI_TZ).strftime('%Y-%m-%d %H:%M')}"
+            
+            # 【新增功能】抓取詳細資訊連結
+            detail_url = ""
+            link_element = incident_container.find('a', href=True)
+            if link_element:
+                detail_url = "https://www.1968services.tw" + link_element['href']
 
-            if "台9線" in content or "蘇花" in content:
+            if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
                 status = "事件"; css_class = "road-yellow"; is_high_risk = False
                 
                 for keyword in high_risk_keywords:
@@ -271,39 +267,37 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                     elif has_downgrade_option:
                         status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
-                # v8 智慧判斷新舊路
-                is_old_road_event = False
-                # 規則一：明確的舊路指標
-                if any(keyword in content for keyword in old_suhua_keywords):
-                    is_old_road_event = True
-                else:
-                    # 規則二：明確的新路指標
-                    is_new_road_event = any(keyword in content for keyword in new_suhua_tunnels)
-                    if not is_new_road_event:
-                        # 規則三：公里數驗證
-                        km_match = re.search(r'(\d{3})[Kk]', content)
-                        if km_match:
-                            km = int(km_match.group(1))
-                            is_in_new_range = any(start <= km <= end for start, end in new_suhua_km_ranges)
-                            if not is_in_new_range:
-                                is_old_road_event = True # 公里數不在新路範圍內，視為舊路
+                is_old_road_event = "台9丁線" in content
                 
-                # 分類
-                assigned_section = None
+                new_suhua_tunnels = ["蘇澳隧道", "東澳隧道", "觀音隧道", "谷風隧道", "中仁隧道", "仁水隧道"]
+                is_new_road_event = any(tunnel in content for tunnel in new_suhua_tunnels)
+                
+                if is_new_road_event:
+                    is_old_road_event = False
+                elif not is_old_road_event: # 如果沒有明確標示台9丁，也不是新隧道，則用公里數判斷
+                    km_match = re.search(r'(\d+\.?\d*)[Kk]', content)
+                    if km_match:
+                        try:
+                            km = float(km_match.group(1))
+                            # 蘇花改主要新路段公里數範圍
+                            new_ranges = [(104, 113), (124, 145), (148, 160)]
+                            if not any(start <= km <= end for start, end in new_ranges):
+                                is_old_road_event = True
+                        except ValueError:
+                            pass
+                
+                # 分類邏輯：移除 break，允許重複歸類到多個路段
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
-                        assigned_section = section_name
-                        break
-                
-                if assigned_section:
-                    results[assigned_section].append({
-                        "section": assigned_section, "status": status, "class": css_class,
-                        "desc": f"（{content}）", "time": report_time, "is_old_road": is_old_road_event
-                    })
+                        results[section_name].append({
+                            "section": section_name, "status": status, "class": css_class,
+                            "desc": f"（{content}）", "time": report_time, "is_old_road": is_old_road_event,
+                            "detail_url": detail_url
+                        })
                         
     except requests.exceptions.RequestException as e:
         print(f"Error fetching road data: {e}")
-        error_event = { "section": "全線", "status": "讀取失敗", "class": "road-red", "desc": "無法連接路況伺服器", "time": "", "is_old_road": False }
+        error_event = { "section": "全線", "status": "讀取失敗", "class": "road-red", "desc": "無法連接路況伺服器", "time": "", "is_old_road": False, "detail_url": "" }
         for section_name in sections.keys():
             results[section_name].append(error_event)
             
@@ -311,7 +305,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard v3.0 FINAL is running."}
+    return {"status": "Guardian Angel Dashboard FINAL VERSION is running."}
 
 @app.head("/")
 def read_root_head():
