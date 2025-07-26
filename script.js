@@ -46,41 +46,27 @@ document.addEventListener('DOMContentLoaded', () => {
     rainfallMapImage.src = BACKEND_URL + '/api/rainfall-map';
     rainfallMapImage.onerror = () => { rainfallMapImage.alt = '累積雨量圖載入失敗'; };
 
-    // 更新雨量資訊
     rainList.innerHTML = '';
     if (data.rainInfo && data.rainInfo.length > 0) {
       data.rainInfo.forEach(item => {
         const li = document.createElement('li');
-        let display_mm = '';
-        let display_level = item.level;
-        if (item.mm === "N/A") {
-          display_mm = '';
-        } else if (parseFloat(item.mm) === 0) {
-          display_mm = '0 mm';
-          display_level = '過去 24 小時無降雨';
-        } else {
-          display_mm = `${item.mm} mm`;
-        }
+        let display_mm = ''; let display_level = item.level;
+        if (item.mm === "N/A") { display_mm = ''; }
+        else if (parseFloat(item.mm) === 0) { display_mm = '0 mm'; display_level = '過去 24 小時無降雨'; }
+        else { display_mm = `${item.mm} mm`; }
         const time_display = item.time ? `（${item.time}）` : '';
-        
         let forecast_html = '';
         if (item.forecast) {
             let forecast_class = 'forecast-safe';
-            if (item.forecast.includes('%') && parseInt(item.forecast) > 50) {
-                forecast_class = 'forecast-warning';
-            }
-             if (item.forecast.includes('失敗')) {
-                forecast_class = 'forecast-error';
-            }
+            if (item.forecast.includes('%') && parseInt(item.forecast) > 50) { forecast_class = 'forecast-warning'; }
+            if (item.forecast.includes('失敗')) { forecast_class = 'forecast-error'; }
             forecast_html = `<div class="forecast-line ${forecast_class}">└── 未來 6 小時預估：${item.forecast}</div>`;
         }
-
         li.innerHTML = `<div>${item.location}：<span class="rain-mm ${item.class}">${display_mm}</span> ${display_level} <span class="data-time">${time_display}</span></div>${forecast_html}`;
         rainList.appendChild(li);
       });
     }
 
-    // 更新地震資訊
     earthquakeList.innerHTML = '';
     if (data.earthquakeInfo && data.earthquakeInfo.length > 0) {
       data.earthquakeInfo.forEach(item => {
@@ -97,17 +83,28 @@ document.addEventListener('DOMContentLoaded', () => {
       earthquakeList.appendChild(li);
     }
 
-    // 更新蘇花路況
+    // 【修改處】升級路況顯示邏輯
     roadList.innerHTML = '';
-     if (data.roadInfo && data.roadInfo.length > 0) {
-      data.roadInfo.forEach(item => {
+    const sections = ["蘇澳-南澳", "南澳-和平", "和平-秀林"];
+    let hasIncident = false;
+    sections.forEach(sectionName => {
+        const incidents = data.roadInfo[sectionName] || [];
+        if (incidents.length > 0) {
+            incidents.forEach(item => {
+                const li = document.createElement('li');
+                li.innerHTML = `${item.section}：<span class="road-status ${item.class}">${item.status}</span> ${item.desc} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span>`;
+                roadList.appendChild(li);
+                hasIncident = true;
+            });
+        }
+    });
+
+    if (!hasIncident) {
         const li = document.createElement('li');
-        li.innerHTML = `${item.section}：<span class="road-status ${item.class}">${item.status}</span> ${item.desc} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span>`;
+        li.innerHTML = `蘇澳-秀林 全線：<span class="road-status road-green">正常通行</span>`;
         roadList.appendChild(li);
-      });
     }
 
-    // 更新颱風動態
     if (data.typhoonInfo) {
       typhoonBox.style.background = '#f3f4f6';
       typhoonBox.innerHTML = `<div><b>${data.typhoonInfo.name}</b></div>
