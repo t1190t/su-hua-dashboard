@@ -199,30 +199,28 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> List[Dict[str, Any]]:
-    # 【修改處】改用 1968 網站的內部 API，不再爬蟲
-    url = "https://1968.freeway.gov.tw/api/getIncidents"
+    # 【修改處】還原為我們最穩定、經過驗證的警廣網站爬蟲版本
+    url = "https://www.1968services.tw/pbs-incident?region=e&page=1"
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
-        "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
-        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "中仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
+        "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道", "中仁隧道"],
+        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
     }
     high_risk_keywords = ["封閉", "中斷", "坍方"]
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧"]
     results = {name: {"section": name, "status": "正常通行", "class": "road-green", "desc": "", "time": ""} for name in sections.keys()}
-    
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
-        incidents = response.json()
+        soup = BeautifulSoup(response.text, 'lxml')
+        incidents = soup.find_all('div', class_='incident-item')
         update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
-
         for incident in incidents:
-            content = incident.get("comment", "")
+            content = " ".join(incident.get_text().split())
             if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
                 status = "事件"; css_class = "road-yellow"; is_high_risk = False
-                
                 for keyword in high_risk_keywords:
                     if keyword in content:
                         status = keyword; css_class = "road-red"; is_high_risk = True; break
@@ -230,20 +228,16 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
                     for keyword in mid_risk_keywords:
                         if keyword in content:
                             status = keyword; css_class = "road-yellow"; break
-                
                 if is_high_risk and any(keyword in content for keyword in downgrade_keywords):
                     status = f"管制 ({status}改道)"; css_class = "road-yellow"
-
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
                         if results[section_name]["status"] == "正常通行":
                              results[section_name].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
-                        
     except requests.exceptions.RequestException as e:
         print(f"Error fetching road data: {e}")
         for section_name in sections.keys():
             results[section_name] = { "section": section_name, "status": "讀取失敗", "class": "road-red", "desc": "", "time": "" }
-            
     return list(results.values())
 
 @app.get("/")
