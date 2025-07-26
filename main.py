@@ -202,10 +202,17 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     base_url = "https://www.1968services.tw/pbs-incident?region=e&page="
     pages_to_scrape = [1, 2]
     
+    # 【修改處】新增 is_new 標籤來區分新舊路段
     sections = {
-        "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
-        "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
-        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "中仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
+        "蘇澳-南澳": ["蘇澳", ("東澳", True), ("蘇澳隧道", True), ("東澳隧道", True), ("東岳隧道", True)],
+        "南澳-和平": ["南澳", "武塔", "漢本", "和平", ("觀音隧道", True), ("谷風隧道", True)],
+        "和平-秀林": [
+            "和平", "和仁", "崇德", "秀林", 
+            ("和平隧道", False), ("和中隧道", False), ("和仁隧道", False), 
+            ("中仁隧道", True), ("仁水隧道", True), 
+            ("大清水隧道", False), ("錦文隧道", False), ("匯德隧道", True), ("崇德隧道", False), 
+            ("清水斷崖", False), ("下清水橋", False), "大清水"
+        ]
     }
     high_risk_keywords = ["封閉", "中斷", "坍方"]
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
@@ -235,7 +242,6 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
             if time_element and time_element.find_next_sibling('td'):
                 try:
                     report_time_str = time_element.find_next_sibling('td').get_text().strip()
-                    # 【修改處】格式化為您要求的完整時間格式
                     report_time = f"通報時間: {datetime.strptime(report_time_str, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d %H:%M')}"
                 except ValueError:
                     report_time = f"通報時間: {datetime.now(TAIPEI_TZ).strftime('%Y-%m-%d %H:%M')}"
@@ -254,21 +260,34 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                 if is_high_risk and any(keyword in content for keyword in downgrade_keywords):
                     status = f"管制 ({status}改道)"; css_class = "road-yellow"
                 
+                # 新舊路判斷邏輯
+                is_old_road = "台9丁線" in content
+                desc_suffix = ""
+
                 incident_assigned = False
-                for section_name, keywords in sections.items():
-                    if any(keyword in content for keyword in keywords):
-                        # 【修改處】確保 section_name 也被加入到事件物件中
-                        results[section_name].append({
-                            "section": section_name,
-                            "status": status,
-                            "class": css_class,
-                            "desc": f"（{content}）",
-                            "time": report_time
-                        })
-                        incident_assigned = True
-                
-                if not incident_assigned:
-                    print(f"未分類的蘇花路況: {content}")
+                for section_name, keywords_config in sections.items():
+                    for config in keywords_config:
+                        keyword = config if isinstance(config, str) else config[0]
+                        is_new_road_keyword = not isinstance(config, str) and config[1]
+                        
+                        if keyword in content:
+                            if not is_new_road_keyword: # 如果關鍵字屬於舊路段
+                                is_old_road = True
+                            
+                            if is_old_road:
+                                desc_suffix = " (此為舊蘇花路段)"
+
+                            results[section_name].append({
+                                "section": section_name,
+                                "status": status,
+                                "class": css_class,
+                                "desc": f"（{content}）{desc_suffix}",
+                                "time": report_time
+                            })
+                            incident_assigned = True
+                            break # 跳出內層迴圈，避免同一事件在同一路段被重複加入
+                    if incident_assigned:
+                        break # 跳出外層迴圈，避免同一事件被歸類到不同路段
                         
     except requests.exceptions.RequestException as e:
         print(f"Error fetching road data: {e}")
@@ -280,7 +299,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
 
 @app.get("/")
 def read_root():
-    return {"status": "Guardian Angel Dashboard FINAL POLISHED VERSION is running."}
+    return {"status": "Guardian Angel Dashboard v3.0 (Smart Route Analysis) is running."}
 
 @app.head("/")
 def read_root_head():
