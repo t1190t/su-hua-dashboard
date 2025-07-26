@@ -199,18 +199,19 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
+    # 【修改處】升級為 v6 智慧分析引擎
     base_url = "https://www.1968services.tw/pbs-incident?region=e&page="
     pages_to_scrape = [1, 2]
     
+    # 新舊路關鍵字詞庫
     sections = {
-        "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
-        "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
-        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "中仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
+        "蘇澳-南澳": [("蘇澳", False), ("東澳", False), ("蘇澳隧道", True), ("東澳隧道", True), ("東岳隧道", True)],
+        "南澳-和平": [("南澳", False), ("武塔", False), ("漢本", False), ("和平", False), ("觀音隧道", True), ("谷風隧道", True)],
+        "和平-秀林": [("和平", False), ("和仁", False), ("崇德", False), ("秀林", False), ("和平隧道", False), ("和中隧道", False), ("和仁隧道", False), ("中仁隧道", True), ("仁水隧道", True), ("大清水隧道", False), ("錦文隧道", False), ("匯德隧道", True), ("崇德隧道", False), ("清水斷崖", False), ("下清水橋", False), ("大清水", False)]
     }
     high_risk_keywords = ["封閉", "中斷", "坍方"]
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧", "作業"]
-    # 【新增功能】程度修飾詞
     degree_keywords = ["單線", "單側", "車道", "非全路幅", "慢車道", "機動"]
     
     results = {name: [] for name in sections.keys()}
@@ -252,43 +253,52 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                         if keyword in content:
                             status = keyword; css_class = "road-yellow"; break
                 
-                # 【修改處】更精細的風險降級邏輯
                 is_partial_closure = any(keyword in content for keyword in degree_keywords)
                 has_downgrade_option = any(keyword in content for keyword in downgrade_keywords)
-
                 if is_high_risk:
                     if is_partial_closure:
-                        status = f"管制 ({status}單線)" # 例如：管制 (封閉單線)
-                        css_class = "road-yellow"
+                        status = f"管制 ({status}單線)"; css_class = "road-yellow"
                     elif has_downgrade_option:
-                        status = f"管制 ({status}改道)"
-                        css_class = "road-yellow"
+                        status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
+                # 智慧判斷新舊路
                 is_old_road_event = "台9丁線" in content
-                desc_suffix = ""
                 
                 assigned_section = None
+                # 優先判斷是否包含新路關鍵字
                 for section_name, keywords_config in sections.items():
                     for config in keywords_config:
                         keyword = config[0] if isinstance(config, tuple) else config
                         if keyword in content:
                             is_new_road_keyword = isinstance(config, tuple) and config[1]
-                            if isinstance(config, tuple) and not is_new_road_keyword: is_old_road_event = True
-                            if is_new_road_keyword: is_old_road_event = False
-                            assigned_section = section_name; break
+                            if is_new_road_keyword:
+                                is_old_road_event = False
+                                assigned_section = section_name
+                                break
                     if assigned_section: break
                 
+                # 如果沒有新路關鍵字，再判斷舊路
+                if not assigned_section:
+                    for section_name, keywords_config in sections.items():
+                        for config in keywords_config:
+                            keyword = config[0] if isinstance(config, tuple) else config
+                            if keyword in content:
+                                is_old_road_keyword = not (isinstance(config, tuple) and config[1])
+                                if is_old_road_keyword:
+                                    is_old_road_event = True
+                                assigned_section = section_name
+                                break
+                        if assigned_section: break
+                
                 if assigned_section:
-                    if is_old_road_event: desc_suffix = " (此為舊蘇花路段)"
                     results[assigned_section].append({
                         "section": assigned_section, "status": status, "class": css_class,
-                        "desc": f"（{content}）{desc_suffix}", "time": report_time,
-                        "is_old_road": is_old_road_event
+                        "desc": f"（{content}）", "time": report_time, "is_old_road": is_old_road_event
                     })
                         
     except requests.exceptions.RequestException as e:
         print(f"Error fetching road data: {e}")
-        error_event = { "section": "全線", "status": "讀取失敗", "class": "road-red", "desc": "無法連接路況伺服器", "time": "", "is_old_road": False }
+        error_event = { "section": "全線", "status": "讀取失敗", "class": "road-red", "desc": "無法連接路況伺-服器", "time": "", "is_old_road": False }
         for section_name in sections.keys():
             results[section_name].append(error_event)
             
