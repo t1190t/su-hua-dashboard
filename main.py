@@ -198,43 +198,50 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
         else: print(f"Error fetching typhoon data: {e}")
     return None
 
-async def get_suhua_road_data() -> List[Dict[str, Any]]:
+async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     base_url = "https://www.1968services.tw/pbs-incident?region=e&page="
     pages_to_scrape = [1, 2]
     
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
-        "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道", "中仁隧道"],
-        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
+        "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
+        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "中仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
     }
     high_risk_keywords = ["封閉", "中斷", "坍方"]
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧", "作業"]
     
-    results = {name: {"section": name, "status": "正常通行", "class": "road-green", "desc": "", "time": ""} for name in sections.keys()}
+    # 【修改處】資料結構改變：從單一狀態變成事件列表
+    results = {name: [] for name in sections.keys()}
     all_incidents = []
     
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        headers = {'User-Agent': 'Mozilla/5.0'}
         for page in pages_to_scrape:
             url = f"{base_url}{page}"
             response = requests.get(url, headers=headers, timeout=15)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'lxml')
-            # 【修改處】使用從您提供的原始碼中找到的、絕對正確的 class name
             all_incidents.extend(soup.find_all('div', class_='w3-col l3 m6'))
 
-        update_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
         print(f"總共找到 {len(all_incidents)} 則路況事件容器。")
 
         for incident_container in all_incidents:
-            # 從容器中找到真正的文字描述
-            text_element = incident_container.find('td', text='描述')
-            if not text_element or not text_element.find_next_sibling('td'):
-                continue
-            
-            content = " ".join(text_element.find_next_sibling('td').get_text().split())
-            
+            # 抓取描述文字
+            desc_element = incident_container.find('td', text='描述')
+            if not desc_element or not desc_element.find_next_sibling('td'): continue
+            content = " ".join(desc_element.find_next_sibling('td').get_text().split())
+
+            # 抓取通報時間
+            time_element = incident_container.find('td', text='時間')
+            report_time = ""
+            if time_element and time_element.find_next_sibling('td'):
+                try:
+                    report_time_str = time_element.find_next_sibling('td').get_text().strip()
+                    report_time = datetime.strptime(report_time_str, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")
+                except ValueError:
+                    report_time = datetime.now(TAIPEI_TZ).strftime("%H:%M")
+
             if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
                 status = "事件"; css_class = "road-yellow"; is_high_risk = False
                 
@@ -248,17 +255,29 @@ async def get_suhua_road_data() -> List[Dict[str, Any]]:
                 
                 if is_high_risk and any(keyword in content for keyword in downgrade_keywords):
                     status = f"管制 ({status}改道)"; css_class = "road-yellow"
-
+                
+                # 修正後的分類邏輯
+                incident_assigned = False
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
-                        results[section_name].update({"status": status, "class": css_class, "desc": f"（{content}）", "time": update_time})
+                        results[section_name].append({
+                            "status": status,
+                            "class": css_class,
+                            "desc": f"（{content}）",
+                            "time": report_time
+                        })
+                        incident_assigned = True
+                
+                if not incident_assigned:
+                    print(f"未分類的蘇花路況: {content}")
                         
     except requests.exceptions.RequestException as e:
         print(f"Error fetching road data: {e}")
+        error_event = { "status": "讀取失敗", "class": "road-red", "desc": "無法連接路況伺服器", "time": "" }
         for section_name in sections.keys():
-            results[section_name] = { "section": section_name, "status": "讀取失敗", "class": "road-red", "desc": "", "time": "" }
+            results[section_name].append(error_event)
             
-    return list(results.values())
+    return results
 
 @app.get("/")
 def read_root():
