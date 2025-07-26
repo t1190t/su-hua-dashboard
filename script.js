@@ -1,4 +1,6 @@
 // 【‼️請務必修改此處‼️】
+// 請將下方的佔位符文字 'YOUR_RENDER_URL_HERE'，
+// 完整替換成您真實的 Render 後端網址。
 const BACKEND_URL = 'https://su-hua-dashboard.onrender.com';
 
 // --- 以下程式碼不需要修改 ---
@@ -83,6 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
       earthquakeList.appendChild(li);
     }
 
+    // 【修改處】升級路況顯示邏輯，以正確處理新的資料結構
     roadList.innerHTML = '';
     const roadSections = data.roadInfo || {};
     let totalIncidents = 0;
@@ -94,16 +97,19 @@ document.addEventListener('DOMContentLoaded', () => {
         totalIncidents += incidents.length;
         incidents.forEach(item => {
           const li = document.createElement('li');
+          // 根據 is_old_road 標籤決定是否要加上備註
           const oldRoadTag = item.is_old_road ? `<span class="old-road-tag">(此為舊蘇花路段)</span>` : "";
+          // 從事件物件中讀取路段名稱，修正 undefined 問題
           const sectionTitle = item.section || sectionName;
           
           li.innerHTML = `<div>${sectionTitle} ${oldRoadTag}：<span class="road-status ${item.class}">${item.status}</span></div>
-                          <div class="road-desc">${item.desc} <span class="data-time">${item.time ? `（${item.time}）` : ''}</span></div>`;
+                          <div class="road-desc">${item.desc} <span class="data-time">${item.time ? `${item.time}` : ''}</span></div>`;
           roadList.appendChild(li);
         });
       }
     });
 
+    // 如果所有路段都沒有任何事件，才顯示正常通行
     if (totalIncidents === 0) {
         const li = document.createElement('li');
         li.innerHTML = `蘇澳-秀林 全線：<span class="road-status road-green">正常通行</span>`;
