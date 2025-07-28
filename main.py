@@ -200,17 +200,17 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
+    # 【修改處】v9 最終修正版智慧分析引擎
     base_url = "https://www.1968services.tw/pbs-incident?region=e&page="
     pages_to_scrape = [1, 2]
     
-    # 最終版關鍵字詞庫
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
-        "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
-        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "中仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
+        "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道", "中仁隧道"],
+        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
     }
     high_risk_keywords = ["封閉", "中斷", "坍方"]
-    downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
+    downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "行駛台９丁線", "單線雙向", "戒護通行", "放行"]
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧", "作業"]
     degree_keywords = ["單線", "單側", "車道", "非全路幅", "慢車道", "機動"]
     
@@ -229,9 +229,14 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         print(f"總共找到 {len(all_incidents)} 則路況事件容器。")
 
         for incident_container in all_incidents:
+            # 讀取完整的情報 (標題 + 描述)
+            title_element = incident_container.find('div', class_='w3-center')
             desc_element = incident_container.find('td', text='描述')
-            if not desc_element or not desc_element.find_next_sibling('td'): continue
-            content = " ".join(desc_element.find_next_sibling('td').get_text().split())
+            
+            if not title_element or not desc_element or not desc_element.find_next_sibling('td'): continue
+            
+            full_content = title_element.get_text() + " " + desc_element.find_next_sibling('td').get_text()
+            content = " ".join(full_content.split()) # 標準化文字
 
             time_element = incident_container.find('td', text='時間')
             report_time = ""
@@ -242,13 +247,13 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                 except ValueError:
                     report_time = f"通報時間: {datetime.now(TAIPEI_TZ).strftime('%Y-%m-%d %H:%M')}"
             
-            # 【新增功能】抓取詳細資訊連結
             detail_url = ""
             link_element = incident_container.find('a', href=True)
             if link_element:
                 detail_url = "https://www.1968services.tw" + link_element['href']
 
-            if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
+            # 使用包含全形數字的關鍵字進行第一層篩選
+            if any(keyword in content for keyword in ["台9線", "台９線", "蘇花", "台9丁線", "台９丁線"]):
                 status = "事件"; css_class = "road-yellow"; is_high_risk = False
                 
                 for keyword in high_risk_keywords:
@@ -266,27 +271,25 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                         status = f"管制 ({status}單線)"; css_class = "road-yellow"
                     elif has_downgrade_option:
                         status = f"管制 ({status}改道)"; css_class = "road-yellow"
-
-                is_old_road_event = "台9丁線" in content
+                
+                is_old_road_event = any(keyword in content for keyword in ["台9丁線", "台９丁線"])
                 
                 new_suhua_tunnels = ["蘇澳隧道", "東澳隧道", "觀音隧道", "谷風隧道", "中仁隧道", "仁水隧道"]
                 is_new_road_event = any(tunnel in content for tunnel in new_suhua_tunnels)
                 
                 if is_new_road_event:
                     is_old_road_event = False
-                elif not is_old_road_event: # 如果沒有明確標示台9丁，也不是新隧道，則用公里數判斷
+                elif not is_old_road_event:
                     km_match = re.search(r'(\d+\.?\d*)[Kk]', content)
                     if km_match:
                         try:
                             km = float(km_match.group(1))
-                            # 蘇花改主要新路段公里數範圍
                             new_ranges = [(104, 113), (124, 145), (148, 160)]
                             if not any(start <= km <= end for start, end in new_ranges):
                                 is_old_road_event = True
-                        except ValueError:
-                            pass
+                        except ValueError: pass
                 
-                # 分類邏輯：移除 break，允許重複歸類到多個路段
+                # 分類邏輯
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
                         results[section_name].append({
