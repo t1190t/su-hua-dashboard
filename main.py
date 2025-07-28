@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import warnings
 import pytz
 import re
-import json # 引入 json 模組來處理可能的錯誤
+from bs4 import BeautifulSoup # 重新引用 BeautifulSoup
 
 # 忽略 InsecureRequestWarning 警告
 from urllib3.exceptions import InsecureRequestWarning
@@ -24,10 +24,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-CWA_API_KEY = os.environ.get('CWA_API_KEY', 'CWA-B3D5458A-4530-4045-A702-27A786C1E934') # 方便測試，直接填入您的KEY
+# 為了方便您在本機測試，可以直接填入您的KEY
+# 在部署到雲端時，建議還是使用環境變數
+CWA_API_KEY = os.environ.get('CWA_API_KEY', 'CWA-B3D5458A-4530-4045-A702-27A786C1E934')
 TAIPEI_TZ = pytz.timezone('Asia/Taipei')
 
-# --- Helper Functions ---
+# --- Helper Functions (保持不變) ---
 def get_rain_level(value: float) -> tuple[str, str, str]:
     if value < 0: return "資料異常", "rain-red", "資料異常"
     if value > 200: return "🟥 豪大雨", "rain-red", "豪大雨"
@@ -37,7 +39,7 @@ def get_rain_level(value: float) -> tuple[str, str, str]:
     if value > 0: return "🟩 小雨", "rain-green", "小雨"
     return "⬜️ 無雨", "rain-none", "無雨"
 
-# --- API 路由定義 ---
+# --- API 路由定義 (保持不變) ---
 @app.get("/api/dashboard-data")
 async def get_dashboard_data() -> Dict[str, Any]:
     current_time = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d %H:%M:%S")
@@ -78,7 +80,7 @@ async def get_rainfall_map():
         print(f"Error fetching rainfall map: {e}")
         return Response(status_code=404)
 
-# --- 資料獲取函式 (其他部分保持不變) ---
+# --- 資料獲取函式 (CWA部分保持不變) ---
 async def get_cwa_rain_forecast() -> Dict[str, str]:
     location_names = "蘇澳鎮,南澳鄉,秀林鄉,新城鄉"
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091?Authorization={CWA_API_KEY}&locationName={location_names}&elementName=PoP6h"
@@ -202,20 +204,31 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 # ==============================================================================
-# ===== ✨底下是路況函式的最終修正版，加入了更完整的標頭 (Headers) ✨ =====
+# ===== ✨底下是最終的「網頁爬蟲」版本，它會爬取前三頁的資料 ✨ =====
 # ==============================================================================
 async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
-    api_url = "https://www.1968services.tw/api/getIncidents"
+    # 定義要爬取的頁面
+    base_url = "https://www.1968services.tw/pbs-incident?region=e&page="
+    pages_to_scrape = [1, 2, 3] # 爬取前三頁
     
-    # 【本次修正重點】加入更完整的標頭，特別是 `Referer`
+    # 【本次修正重點】使用最完整的標頭，模擬真實瀏覽器
     headers = {
-        'Accept': 'application/json, text/plain, */*',
-        'Content-Type': 'application/json;charset=UTF-8',
-        'Origin': 'https://www.1968services.tw',
-        'Referer': 'https://www.1968services.tw/pbs-incident?region=e', # 告訴伺服器我們是從這個頁面來的
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br, zstd',
+        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': 'https://www.1968services.tw/pbs-incident?region=e', # 告訴伺服器我們從上一頁來的
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'document',
+        'sec-fetch-mode': 'navigate',
+        'sec-fetch-site': 'same-origin',
+        'sec-fetch-user': '?1',
+        'upgrade-insecure-requests': '1',
     }
     
+    # 關鍵字和路段定義 (與您原始版本相同)
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
         "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
@@ -227,32 +240,48 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     degree_keywords = ["單線", "單側", "車道", "非全路幅", "慢車道", "機動"]
     
     results = {name: [] for name in sections.keys()}
-    response = None # 先宣告 response 變數
-    
-    try:
-        response = requests.post(api_url, json={"region": "e"}, headers=headers, timeout=15)
-        response.raise_for_status()
-        
-        incidents = response.json()
-        
-        print(f"✅ 成功透過 API 取得 {len(incidents)} 則路況事件。")
+    all_incidents = []
 
-        for incident in incidents:
-            content = incident.get("dsc", "")
-            report_time_str = incident.get("time", "")
+    try:
+        # 迴圈爬取每一頁
+        for page in pages_to_scrape:
+            url = f"{base_url}{page}"
+            print(f"正在爬取頁面: {url}")
+            response = requests.get(url, headers=headers, timeout=15)
+            response.raise_for_status() # 如果請求失敗 (如 404, 500)，會直接拋出錯誤
             
+            # 使用 BeautifulSoup 解析 HTML
+            soup = BeautifulSoup(response.text, 'lxml')
+            
+            # 找到所有事件的容器，並加到 all_incidents 列表中
+            found_on_page = soup.find_all('div', class_='w3-col l3 m6')
+            if not found_on_page:
+                print(f"警告：在頁面 {page} 上找不到任何路況事件容器。可能是頁面結構已更改或該頁已無資料。")
+            all_incidents.extend(found_on_page)
+
+        print(f"✅ 成功爬取 {len(pages_to_scrape)} 個頁面，總共找到 {len(all_incidents)} 則路況事件容器。")
+
+        # 遍歷所有找到的事件容器，進行解析
+        for incident_container in all_incidents:
+            desc_element = incident_container.find('td', text='描述')
+            if not desc_element or not desc_element.find_next_sibling('td'): continue
+            content = " ".join(desc_element.find_next_sibling('td').get_text().split())
+
+            time_element = incident_container.find('td', text='時間')
             report_time = ""
-            if report_time_str:
+            if time_element and time_element.find_next_sibling('td'):
                 try:
+                    report_time_str = time_element.find_next_sibling('td').get_text().strip()
                     report_time = f"通報時間: {datetime.strptime(report_time_str, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d %H:%M')}"
                 except ValueError:
                     report_time = f"通報時間: {datetime.now(TAIPEI_TZ).strftime('%Y-%m-%d %H:%M')}"
             
             detail_url = ""
-            incident_id = incident.get("id")
-            if incident_id:
-                detail_url = f"https://www.1968services.tw/incident/{incident_id}"
+            link_element = incident_container.find('a', href=True)
+            if link_element:
+                detail_url = "https://www.1968services.tw" + link_element['href']
 
+            # 後續的分類邏輯 (與您原始版本相同)
             if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
                 status = "事件"; css_class = "road-yellow"; is_high_risk = False
                 
@@ -298,18 +327,11 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                             "detail_url": detail_url
                         })
                         
-    except json.JSONDecodeError as e:
-        print(f"❌ 解析 JSON 失敗: {e}")
-        # 【本次修正重點】如果解析JSON失敗，印出伺服器回傳的原始文字內容
-        if response:
-             print(f"收到的伺服器回應內容並非JSON格式:\n--- START ---\n{response.text}\n--- END ---")
-        for section_name in sections.keys():
-            results[section_name].append({ "section": "全線", "status": "解析失敗", "class": "road-red", "desc": "伺服器回應格式錯誤", "time": "", "is_old_road": False, "detail_url": "" })
-
     except requests.exceptions.RequestException as e:
-        print(f"❌ 網路請求失敗: {e}")
+        print(f"❌ 爬取網頁時發生網路錯誤: {e}")
+        error_event = { "section": "全線", "status": "爬取失敗", "class": "road-red", "desc": "無法連接路況網頁", "time": "", "is_old_road": False, "detail_url": "" }
         for section_name in sections.keys():
-            results[section_name].append({ "section": "全線", "status": "讀取失敗", "class": "road-red", "desc": "無法連接路況伺服器", "time": "", "is_old_road": False, "detail_url": "" })
+            results[section_name].append(error_event)
             
     return results
 
