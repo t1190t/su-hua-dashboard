@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import warnings
 import pytz
 import re
-from bs4 import BeautifulSoup # 重新引用 BeautifulSoup
+from bs4 import BeautifulSoup
 
 # 忽略 InsecureRequestWarning 警告
 from urllib3.exceptions import InsecureRequestWarning
@@ -24,8 +24,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 為了方便您在本機測試，可以直接填入您的KEY
-# 在部署到雲端時，建議還是使用環境變數
 CWA_API_KEY = os.environ.get('CWA_API_KEY', 'CWA-B3D5458A-4530-4045-A702-27A786C1E934')
 TAIPEI_TZ = pytz.timezone('Asia/Taipei')
 
@@ -204,35 +202,21 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 # ==============================================================================
-# ===== ✨底下是最終的「網頁爬蟲」版本，它會爬取前三頁的資料 ✨ =====
+# ===== ✨路況爬蟲函式 (包含最完整的關鍵字與公里數判斷邏輯)✨ =====
 # ==============================================================================
 async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
-    # 定義要爬取的頁面
     base_url = "https://www.1968services.tw/pbs-incident?region=e&page="
-    pages_to_scrape = [1, 2, 3] # 爬取前三頁
+    pages_to_scrape = [1, 2, 3]
     
-    # 【本次修正重點】使用最完整的標頭，模擬真實瀏覽器
     headers = {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br, zstd',
-        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Referer': 'https://www.1968services.tw/pbs-incident?region=e', # 告訴伺服器我們從上一頁來的
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-fetch-dest': 'document',
-        'sec-fetch-mode': 'navigate',
-        'sec-fetch-site': 'same-origin',
-        'sec-fetch-user': '?1',
-        'upgrade-insecure-requests': '1',
     }
     
-    # 關鍵字和路段定義 (與您原始版本相同)
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
         "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
-        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "中仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
+        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和中橋", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
     }
     high_risk_keywords = ["封閉", "中斷", "坍方"]
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
@@ -243,25 +227,17 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     all_incidents = []
 
     try:
-        # 迴圈爬取每一頁
         for page in pages_to_scrape:
             url = f"{base_url}{page}"
             print(f"正在爬取頁面: {url}")
             response = requests.get(url, headers=headers, timeout=15)
-            response.raise_for_status() # 如果請求失敗 (如 404, 500)，會直接拋出錯誤
+            response.raise_for_status()
             
-            # 使用 BeautifulSoup 解析 HTML
             soup = BeautifulSoup(response.text, 'lxml')
-            
-            # 找到所有事件的容器，並加到 all_incidents 列表中
-            found_on_page = soup.find_all('div', class_='w3-col l3 m6')
-            if not found_on_page:
-                print(f"警告：在頁面 {page} 上找不到任何路況事件容器。可能是頁面結構已更改或該頁已無資料。")
-            all_incidents.extend(found_on_page)
+            all_incidents.extend(soup.find_all('div', class_='w3-col l3 m6'))
 
         print(f"✅ 成功爬取 {len(pages_to_scrape)} 個頁面，總共找到 {len(all_incidents)} 則路況事件容器。")
 
-        # 遍歷所有找到的事件容器，進行解析
         for incident_container in all_incidents:
             desc_element = incident_container.find('td', text='描述')
             if not desc_element or not desc_element.find_next_sibling('td'): continue
@@ -281,7 +257,6 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
             if link_element:
                 detail_url = "https://www.1968services.tw" + link_element['href']
 
-            # 後續的分類邏輯 (與您原始版本相同)
             if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
                 status = "事件"; css_class = "road-yellow"; is_high_risk = False
                 
@@ -301,24 +276,30 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                     elif has_downgrade_option:
                         status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
+                # === 判斷新/舊蘇花公路的核心邏輯 ===
                 is_old_road_event = "台9丁線" in content
                 
                 new_suhua_tunnels = ["蘇澳隧道", "東澳隧道", "觀音隧道", "谷風隧道", "中仁隧道", "仁水隧道"]
                 is_new_road_event = any(tunnel in content for tunnel in new_suhua_tunnels)
                 
                 if is_new_road_event:
+                    # 如果有提到新隧道的名稱，就絕對是新路
                     is_old_road_event = False
                 elif not is_old_road_event:
+                    # 如果沒有明確標示為台9丁，也不是新隧道，則啟用公里數判斷
                     km_match = re.search(r'(\d+\.?\d*)[Kk]', content)
                     if km_match:
                         try:
                             km = float(km_match.group(1))
+                            # 蘇花改新路段公里數範圍
                             new_ranges = [(104, 113), (124, 145), (148, 160)]
+                            # 如果公里數「沒有」落在新路段的範圍內，就判定為舊路
                             if not any(start <= km <= end for start, end in new_ranges):
                                 is_old_road_event = True
                         except ValueError:
-                            pass
+                            pass # 如果公里數無法轉換成數字，就忽略
                 
+                # 將結果分類到對應的路段
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
                         results[section_name].append({
