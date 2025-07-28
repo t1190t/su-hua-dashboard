@@ -48,11 +48,11 @@ async def get_dashboard_data() -> Dict[str, Any]:
     road_info = await get_suhua_road_data()
 
     dashboard_data = {
-      "lastUpdate": current_time,
-      "rainInfo": rain_info,
-      "earthquakeInfo": earthquake_info,
-      "roadInfo": road_info,
-      "typhoonInfo": typhoon_info
+        "lastUpdate": current_time,
+        "rainInfo": rain_info,
+        "earthquakeInfo": earthquake_info,
+        "roadInfo": road_info,
+        "typhoonInfo": typhoon_info
     }
     return dashboard_data
 
@@ -133,7 +133,7 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
     except requests.exceptions.RequestException as e:
         print(f"Error fetching rain data: {e}")
         for station_name in station_ids.values():
-             processed_data.append({"location": station_name, "mm": "N/A", "class": "rain-error", "level": "讀取失敗", "time": "", "forecast": "N/A"})
+            processed_data.append({"location": station_name, "mm": "N/A", "class": "rain-error", "level": "讀取失敗", "time": "", "forecast": "N/A"})
     return processed_data
 
 async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
@@ -184,8 +184,8 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
         response.raise_for_status()
         data = response.json()
         if data.get("records") and data["records"].get("sea_typhoon_warning"):
-             typhoon_warnings = data["records"]["sea_typhoon_warning"].get("typhoon_warning_summary",{}).get("SeaTyphoonWarning")
-             if typhoon_warnings:
+            typhoon_warnings = data["records"]["sea_typhoon_warning"].get("typhoon_warning_summary",{}).get("SeaTyphoonWarning")
+            if typhoon_warnings:
                 typhoon = typhoon_warnings[0]
                 update_time = datetime.fromisoformat(typhoon["issue_time"]).astimezone(TAIPEI_TZ).strftime("%H:%M")
                 return {
@@ -199,60 +199,57 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
         else: print(f"Error fetching typhoon data: {e}")
     return None
 
+# ==============================================================================
+# ===== ✨底下是修改過後的路況函式，已從「爬取網頁」改為「直接呼叫API」✨ =====
+# ==============================================================================
 async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
-    # 【修改處】最終修正版 v9 智慧分析引擎
-    base_url = "https://www.1968services.tw/pbs-incident?region=e&page="
-    pages_to_scrape = [1, 2]
+    # 直接呼叫1968的官方API，而不是爬取網頁
+    api_url = "https://www.1968services.tw/api/getIncidents"
     
+    # 定義路段和關鍵字 (與您原本的設定相同)
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
         "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
         "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和仁隧道", "中仁隧道", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
     }
     high_risk_keywords = ["封閉", "中斷", "坍方"]
-    downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "行駛台９丁線", "單線雙向", "戒護通行", "放行"]
+    downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧", "作業"]
     degree_keywords = ["單線", "單側", "車道", "非全路幅", "慢車道", "機動"]
     
     results = {name: [] for name in sections.keys()}
     
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        all_incidents = []
-        for page in pages_to_scrape:
-            url = f"{base_url}{page}"
-            response = requests.get(url, headers=headers, timeout=15)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, 'lxml')
-            all_incidents.extend(soup.find_all('div', class_='w3-col l3 m6'))
+        # 使用 POST 請求，並在 json 參數中傳入查詢條件 {"region": "e"} 代表東部
+        response = requests.post(api_url, json={"region": "e"}, timeout=15)
+        response.raise_for_status()
+        
+        # 直接將API回傳的JSON轉換為Python的列表
+        incidents = response.json()
+        
+        print(f"透過 API 總共找到 {len(incidents)} 則路況事件。")
 
-        print(f"總共找到 {len(all_incidents)} 則路況事件容器。")
-
-        for incident_container in all_incidents:
-            # 讀取完整的情報 (標題 + 描述)
-            title_element = incident_container.find('div', class_='w3-center')
-            desc_element = incident_container.find('td', text='描述')
-            if not title_element or not desc_element or not desc_element.find_next_sibling('td'): continue
+        # 直接遍歷從API獲取的每一筆事件資料
+        for incident in incidents:
+            # content 對應到 dsc 欄位, report_time_str 對應到 time 欄位
+            content = incident.get("dsc", "")
+            report_time_str = incident.get("time", "")
             
-            full_content = title_element.get_text() + " " + desc_element.find_next_sibling('td').get_text()
-            content = " ".join(full_content.split())
-
-            time_element = incident_container.find('td', text='時間')
             report_time = ""
-            if time_element and time_element.find_next_sibling('td'):
+            if report_time_str:
                 try:
-                    report_time_str = time_element.find_next_sibling('td').get_text().strip()
                     report_time = f"通報時間: {datetime.strptime(report_time_str, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d %H:%M')}"
                 except ValueError:
                     report_time = f"通報時間: {datetime.now(TAIPEI_TZ).strftime('%Y-%m-%d %H:%M')}"
             
+            # 詳細資訊連結可以直接用 id 組出來
             detail_url = ""
-            link_element = incident_container.find('a', href=True)
-            if link_element:
-                detail_url = "https://www.1968services.tw" + link_element['href']
+            incident_id = incident.get("id")
+            if incident_id:
+                detail_url = f"https://www.1968services.tw/incident/{incident_id}"
 
-            # 使用包含全形數字的關鍵字進行第一層篩選
-            if any(keyword in content for keyword in ["台9線", "台９線", "蘇花", "台9丁線", "台９丁線"]):
+            # 後續的分類邏輯與您原本的程式碼完全相同
+            if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
                 status = "事件"; css_class = "road-yellow"; is_high_risk = False
                 
                 for keyword in high_risk_keywords:
@@ -271,7 +268,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                     elif has_downgrade_option:
                         status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
-                is_old_road_event = any(keyword in content for keyword in ["台9丁線", "台９丁線"])
+                is_old_road_event = "台9丁線" in content
                 
                 new_suhua_tunnels = ["蘇澳隧道", "東澳隧道", "觀音隧道", "谷風隧道", "中仁隧道", "仁水隧道"]
                 is_new_road_event = any(tunnel in content for tunnel in new_suhua_tunnels)
@@ -286,9 +283,10 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                             new_ranges = [(104, 113), (124, 145), (148, 160)]
                             if not any(start <= km <= end for start, end in new_ranges):
                                 is_old_road_event = True
-                        except ValueError: pass
+                        except ValueError:
+                            pass
                 
-                # 分類邏輯：移除 break，允許重複歸類到多個路段
+                # 分類邏輯：允許重複歸類到多個路段
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
                         results[section_name].append({
@@ -298,7 +296,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                         })
                         
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching road data: {e}")
+        print(f"Error fetching road data from API: {e}")
         error_event = { "section": "全線", "status": "讀取失敗", "class": "road-red", "desc": "無法連接路況伺服器", "time": "", "is_old_road": False, "detail_url": "" }
         for section_name in sections.keys():
             results[section_name].append(error_event)
