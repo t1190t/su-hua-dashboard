@@ -6,7 +6,6 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import warnings
 import pytz
-from bs4 import BeautifulSoup
 import re
 
 # 忽略 InsecureRequestWarning 警告
@@ -41,7 +40,7 @@ def get_rain_level(value: float) -> tuple[str, str, str]:
 @app.get("/api/dashboard-data")
 async def get_dashboard_data() -> Dict[str, Any]:
     current_time = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d %H:%M:%S")
-    
+
     rain_info = await get_cwa_rain_data()
     earthquake_info = await get_cwa_earthquake_data()
     typhoon_info = await get_cwa_typhoon_data()
@@ -195,16 +194,24 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
                     "img_url": "https://www.cwa.gov.tw/Data/typhoon/TY_NEWS/TY_NEWS_0.jpg"
                 }
     except requests.exceptions.RequestException as e:
-        if e.response and e.response.status_code == 404: pass
-        else: print(f"Error fetching typhoon data: {e}")
+        # 當API回傳404時，代表沒有颱風警報，這是正常情況，所以直接pass忽略錯誤
+        if e.response and e.response.status_code == 404:
+            pass
+        else:
+            # 其他錯誤（如網路問題）則印出來
+            print(f"Error fetching typhoon data: {e}")
     return None
 
 # ==============================================================================
-# ===== ✨底下是修改過後的路況函式，已從「爬取網頁」改為「直接呼叫API」✨ =====
+# ===== ✨底下是修改過後的路況函式，已加入 User-Agent 標頭來模擬瀏覽器✨ =====
 # ==============================================================================
 async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
-    # 直接呼叫1968的官方API，而不是爬取網頁
     api_url = "https://www.1968services.tw/api/getIncidents"
+    
+    # 【本次修正重點】加上headers，讓請求看起來像一個正常的瀏覽器
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
     
     # 定義路段和關鍵字 (與您原本的設定相同)
     sections = {
@@ -220,18 +227,16 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     results = {name: [] for name in sections.keys()}
     
     try:
-        # 使用 POST 請求，並在 json 參數中傳入查詢條件 {"region": "e"} 代表東部
-        response = requests.post(api_url, json={"region": "e"}, timeout=15)
+        # 將 headers 加入到 POST 請求中
+        response = requests.post(api_url, json={"region": "e"}, headers=headers, timeout=15)
         response.raise_for_status()
         
-        # 直接將API回傳的JSON轉換為Python的列表
+        # 嘗試解析JSON，如果這步出錯，會被下面的 except 捕捉到
         incidents = response.json()
         
         print(f"透過 API 總共找到 {len(incidents)} 則路況事件。")
 
-        # 直接遍歷從API獲取的每一筆事件資料
         for incident in incidents:
-            # content 對應到 dsc 欄位, report_time_str 對應到 time 欄位
             content = incident.get("dsc", "")
             report_time_str = incident.get("time", "")
             
@@ -242,13 +247,11 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                 except ValueError:
                     report_time = f"通報時間: {datetime.now(TAIPEI_TZ).strftime('%Y-%m-%d %H:%M')}"
             
-            # 詳細資訊連結可以直接用 id 組出來
             detail_url = ""
             incident_id = incident.get("id")
             if incident_id:
                 detail_url = f"https://www.1968services.tw/incident/{incident_id}"
 
-            # 後續的分類邏輯與您原本的程式碼完全相同
             if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
                 status = "事件"; css_class = "road-yellow"; is_high_risk = False
                 
@@ -286,7 +289,6 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                         except ValueError:
                             pass
                 
-                # 分類邏輯：允許重複歸類到多個路段
                 for section_name, keywords in sections.items():
                     if any(keyword in content for keyword in keywords):
                         results[section_name].append({
@@ -295,8 +297,10 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                             "detail_url": detail_url
                         })
                         
-    except requests.exceptions.RequestException as e:
+    except Exception as e: # 改為捕捉更廣泛的錯誤，包括JSON解析錯誤
         print(f"Error fetching road data from API: {e}")
+        # 如果需要更詳細的除錯，可以取消下面這行的註解，看看伺服器到底回傳了什麼
+        # print(f"Response text from server: {response.text}")
         error_event = { "section": "全線", "status": "讀取失敗", "class": "road-red", "desc": "無法連接路況伺服器", "time": "", "is_old_road": False, "detail_url": "" }
         for section_name in sections.keys():
             results[section_name].append(error_event)
