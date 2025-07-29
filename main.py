@@ -51,7 +51,7 @@ async def get_dashboard_data() -> Dict[str, Any]:
     rain_info = await get_cwa_rain_data()
     earthquake_info = await get_cwa_earthquake_data()
     typhoon_info = await get_cwa_typhoon_data()
-    road_info = await get_suhua_road_data() # 會呼叫底下全新的 TDX 版本
+    road_info = await get_suhua_road_data()
 
     dashboard_data = {
         "lastUpdate": current_time,
@@ -62,10 +62,9 @@ async def get_dashboard_data() -> Dict[str, Any]:
     }
     return dashboard_data
 
-# --- 其他資料獲取函式 (保持不變) ---
+# --- 其他資料獲取函式 (為求簡潔省略，保持不變) ---
 @app.get("/api/radar-image")
 async def get_radar_image():
-    # ... (程式碼不變，為求簡潔省略)
     image_url = "https://www.cwa.gov.tw/Data/radar/CV1_3600.png"
     try:
         response = requests.get(image_url, timeout=10, verify=False)
@@ -77,7 +76,6 @@ async def get_radar_image():
 
 @app.get("/api/rainfall-map")
 async def get_rainfall_map():
-    # ... (程式碼不變，為求簡潔省略)
     image_url = "https://c1.1968services.tw/map-data/O-A0040-002.jpg"
     try:
         response = requests.get(image_url, timeout=10, verify=False)
@@ -88,7 +86,6 @@ async def get_rainfall_map():
         return Response(status_code=404)
         
 async def get_cwa_rain_forecast():
-    # ... (程式碼不變，為求簡潔省略)
     location_names = "蘇澳鎮,南澳鄉,秀林鄉,新城鄉"
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091?Authorization={CWA_API_KEY}&locationName={location_names}&elementName=PoP6h"
     forecasts = {}
@@ -116,7 +113,6 @@ async def get_cwa_rain_forecast():
     return forecasts
 
 async def get_cwa_rain_data():
-    # ... (程式碼不變，為求簡潔省略)
     station_ids = {"C0O920": "蘇澳鎮", "C0U9N0": "南澳鄉", "C0Z030": "秀林鄉", "C0T8A0":"新城鄉"}
     forecast_data = await get_cwa_rain_forecast()
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
@@ -147,7 +143,6 @@ async def get_cwa_rain_data():
     return processed_data
 
 async def get_cwa_earthquake_data():
-    # ... (程式碼不變，為求簡潔省略)
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/E-A0015-001?Authorization={CWA_API_KEY}&limit=30"
     processed_data = []
     try:
@@ -189,7 +184,6 @@ async def get_cwa_earthquake_data():
     return processed_data
 
 async def get_cwa_typhoon_data():
-    # ... (程式碼不變，為求簡潔省略)
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/T-A0001-001?Authorization={CWA_API_KEY}"
     try:
         response = requests.get(url, verify=False, timeout=15)
@@ -218,7 +212,7 @@ async def get_cwa_typhoon_data():
 # ==============================================================================
 def get_tdx_access_token():
     """
-    步驟2: 獲取 TDX 的 Access Token (號碼牌)
+    獲取 TDX 的 Access Token
     """
     auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
     headers = {"content-type": "application/x-www-form-urlencoded"}
@@ -230,7 +224,7 @@ def get_tdx_access_token():
     
     try:
         response = requests.post(auth_url, data=data, headers=headers)
-        response.raise_for_status() # 如果請求失敗，拋出錯誤
+        response.raise_for_status()
         token_data = response.json()
         print("✅ 成功獲取 TDX Access Token！")
         return token_data.get("access_token")
@@ -244,13 +238,11 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     """
     使用 TDX API 獲取蘇花公路路況，並進行分類
     """
-    # 這是我們要用來分類的關鍵字 (與之前相同)
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
         "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
         "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和中橋", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
     }
-    # ... (其他關鍵字列表也保持不變) ...
     high_risk_keywords = ["封閉", "中斷", "坍方"]
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧", "作業"]
@@ -258,19 +250,16 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     
     results = {name: [] for name in sections.keys()}
     
-    # === 主要流程開始 ===
-    # 1. 獲取 Access Token
     access_token = get_tdx_access_token()
     
     if not access_token:
-        # 如果沒有拿到 token，直接回傳錯誤
         error_event = { "section": "全線", "status": "認證失敗", "class": "road-red", "desc": "無法獲取TDX授權", "time": "", "is_old_road": False, "detail_url": "" }
         for section_name in sections.keys():
             results[section_name].append(error_event)
         return results
 
-    # 2. 拿著 Token 去要路況資料
-    road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/Incident/Road/Provincial?$filter=RoadName eq '台9線' or RoadName eq '台9丁線'&$orderby=UpdateTime desc&$top=50&$format=JSON"
+    # 【本次修正重點】使用正確的 v1 API 路徑
+    road_event_url = "https://tdx.transportdata.tw/api/basic/v1/Road/Event/Provincial?$filter=RoadName eq '台9線' or RoadName eq '台9丁線'&$orderby=UpdateTime desc&$top=50&$format=JSON"
     
     headers = {
         "Authorization": f"Bearer {access_token}"
@@ -281,11 +270,10 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         response.raise_for_status()
         
         data = response.json()
-        incidents = data.get("LiveEvents", [])
+        incidents = data.get("Events", []) # 回傳的資料是 Events，不是 LiveEvents
         
         print(f"✅ 成功從 TDX API 獲取 {len(incidents)} 則路況事件。")
 
-        # 3. 解析與分類資料 (這部分邏輯與之前爬蟲版本類似)
         for incident in incidents:
             content = incident.get("Description", "")
             if not content:
@@ -295,14 +283,12 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
             update_time_str = incident.get("UpdateTime")
             if update_time_str:
                 try:
-                    # 將UTC時間轉換為台北時間
                     utc_time = datetime.fromisoformat(update_time_str.replace('Z', '+00:00'))
                     taipei_time = utc_time.astimezone(TAIPEI_TZ)
                     report_time = f"更新時間: {taipei_time.strftime('%Y-%m-%d %H:%M')}"
                 except ValueError:
                     pass
 
-            # 沿用之前的狀態分類邏輯
             status = "事件"; css_class = "road-yellow"; is_high_risk = False
             for keyword in high_risk_keywords:
                 if keyword in content:
@@ -320,19 +306,16 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                 elif has_downgrade_option:
                     status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
-            # 判斷新舊路
-            road_name = incident.get("Location", {}).get("Road")
+            road_name = incident.get("RoadName")
             is_old_road_event = (road_name == '台9丁線') or ("台9丁線" in content)
             
-            # 分類到對應路段
             for section_name, keywords in sections.items():
                 if any(keyword in content for keyword in keywords):
                     results[section_name].append({
                         "section": section_name, "status": status, "class": css_class,
                         "desc": f"（{content}）", "time": report_time, "is_old_road": is_old_road_event,
-                        "detail_url": "" # TDX API不直接提供詳細頁面連結
+                        "detail_url": ""
                     })
-                    # 找到第一個符合的路段就跳出，避免重複分類
                     break 
 
     except requests.exceptions.RequestException as e:
