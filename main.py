@@ -266,8 +266,8 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         for section_name in sections.keys(): results[section_name].append(error_event)
         return results
 
-    # 【本次修正重點】使用最終正確的「公路消息 v2 API」路徑
-    road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/News/Highway?$orderby=PublishTime desc&$top=100&$format=JSON"
+    # 【本次修正重點】使用最終正確的 API 路徑，包含 /Live/
+    road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/News/Highway?$orderby=PublishTime desc&$top=100&$format=JSON"
     
     headers = {"Authorization": f"Bearer {access_token}"}
 
