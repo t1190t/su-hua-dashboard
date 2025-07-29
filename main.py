@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 import warnings
 import pytz
 import re
-from bs4 import BeautifulSoup
 
 # 忽略 InsecureRequestWarning 警告
 from urllib3.exceptions import InsecureRequestWarning
@@ -23,6 +22,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ==============================================================================
+# ===== ✨ 請在這裡填入您申請到的 TDX 金鑰 ✨ =====
+# ==============================================================================
+TDX_APP_ID = "t1190t-cb75f4a4-e514-489f"  # 請替換成您的 APP ID
+TDX_APP_KEY = "dc00bc01-dff4-47cb-97f4-88fec81e69cc" # 請替換成您的 APP KEY
+# ==============================================================================
 
 CWA_API_KEY = os.environ.get('CWA_API_KEY', 'CWA-B3D5458A-4530-4045-A702-27A786C1E934')
 TAIPEI_TZ = pytz.timezone('Asia/Taipei')
@@ -45,7 +51,7 @@ async def get_dashboard_data() -> Dict[str, Any]:
     rain_info = await get_cwa_rain_data()
     earthquake_info = await get_cwa_earthquake_data()
     typhoon_info = await get_cwa_typhoon_data()
-    road_info = await get_suhua_road_data()
+    road_info = await get_suhua_road_data() # 會呼叫底下全新的 TDX 版本
 
     dashboard_data = {
         "lastUpdate": current_time,
@@ -56,8 +62,10 @@ async def get_dashboard_data() -> Dict[str, Any]:
     }
     return dashboard_data
 
+# --- 其他資料獲取函式 (保持不變) ---
 @app.get("/api/radar-image")
 async def get_radar_image():
+    # ... (程式碼不變，為求簡潔省略)
     image_url = "https://www.cwa.gov.tw/Data/radar/CV1_3600.png"
     try:
         response = requests.get(image_url, timeout=10, verify=False)
@@ -69,6 +77,7 @@ async def get_radar_image():
 
 @app.get("/api/rainfall-map")
 async def get_rainfall_map():
+    # ... (程式碼不變，為求簡潔省略)
     image_url = "https://c1.1968services.tw/map-data/O-A0040-002.jpg"
     try:
         response = requests.get(image_url, timeout=10, verify=False)
@@ -77,9 +86,9 @@ async def get_rainfall_map():
     except requests.exceptions.RequestException as e:
         print(f"Error fetching rainfall map: {e}")
         return Response(status_code=404)
-
-# --- 資料獲取函式 (CWA部分保持不變) ---
-async def get_cwa_rain_forecast() -> Dict[str, str]:
+        
+async def get_cwa_rain_forecast():
+    # ... (程式碼不變，為求簡潔省略)
     location_names = "蘇澳鎮,南澳鄉,秀林鄉,新城鄉"
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091?Authorization={CWA_API_KEY}&locationName={location_names}&elementName=PoP6h"
     forecasts = {}
@@ -106,7 +115,8 @@ async def get_cwa_rain_forecast() -> Dict[str, str]:
             forecasts[name] = "預報讀取失敗"
     return forecasts
 
-async def get_cwa_rain_data() -> List[Dict[str, Any]]:
+async def get_cwa_rain_data():
+    # ... (程式碼不變，為求簡潔省略)
     station_ids = {"C0O920": "蘇澳鎮", "C0U9N0": "南澳鄉", "C0Z030": "秀林鄉", "C0T8A0":"新城鄉"}
     forecast_data = await get_cwa_rain_forecast()
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
@@ -136,7 +146,8 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
             processed_data.append({"location": station_name, "mm": "N/A", "class": "rain-error", "level": "讀取失敗", "time": "", "forecast": "N/A"})
     return processed_data
 
-async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
+async def get_cwa_earthquake_data():
+    # ... (程式碼不變，為求簡潔省略)
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/E-A0015-001?Authorization={CWA_API_KEY}&limit=30"
     processed_data = []
     try:
@@ -177,7 +188,8 @@ async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
         print(f"Error fetching earthquake data: {e}")
     return processed_data
 
-async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
+async def get_cwa_typhoon_data():
+    # ... (程式碼不變，為求簡潔省略)
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/T-A0001-001?Authorization={CWA_API_KEY}"
     try:
         response = requests.get(url, verify=False, timeout=15)
@@ -202,120 +214,136 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 # ==============================================================================
-# ===== ✨路況爬蟲函式 (包含最完整的關鍵字與公里數判斷邏輯)✨ =====
+# ===== ✨ 全新！使用 TDX API 獲取路況資料的函式 ✨ =====
 # ==============================================================================
-async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
-    base_url = "https://www.1968services.tw/pbs-incident?region=e&page="
-    pages_to_scrape = [1, 2, 3]
-    
-    headers = {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+def get_tdx_access_token():
+    """
+    步驟2: 獲取 TDX 的 Access Token (號碼牌)
+    """
+    auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
+    headers = {"content-type": "application/x-www-form-urlencoded"}
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": TDX_APP_ID,
+        "client_secret": TDX_APP_KEY,
     }
     
+    try:
+        response = requests.post(auth_url, data=data, headers=headers)
+        response.raise_for_status() # 如果請求失敗，拋出錯誤
+        token_data = response.json()
+        print("✅ 成功獲取 TDX Access Token！")
+        return token_data.get("access_token")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ 獲取 TDX Access Token 失敗: {e}")
+        if e.response:
+            print(f"    錯誤細節: {e.response.text}")
+        return None
+
+async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
+    """
+    使用 TDX API 獲取蘇花公路路況，並進行分類
+    """
+    # 這是我們要用來分類的關鍵字 (與之前相同)
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
         "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
         "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和中橋", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
     }
+    # ... (其他關鍵字列表也保持不變) ...
     high_risk_keywords = ["封閉", "中斷", "坍方"]
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧", "作業"]
     degree_keywords = ["單線", "單側", "車道", "非全路幅", "慢車道", "機動"]
     
     results = {name: [] for name in sections.keys()}
-    all_incidents = []
+    
+    # === 主要流程開始 ===
+    # 1. 獲取 Access Token
+    access_token = get_tdx_access_token()
+    
+    if not access_token:
+        # 如果沒有拿到 token，直接回傳錯誤
+        error_event = { "section": "全線", "status": "認證失敗", "class": "road-red", "desc": "無法獲取TDX授權", "time": "", "is_old_road": False, "detail_url": "" }
+        for section_name in sections.keys():
+            results[section_name].append(error_event)
+        return results
+
+    # 2. 拿著 Token 去要路況資料
+    road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/Incident/Road/Provincial?$filter=RoadName eq '台9線' or RoadName eq '台9丁線'&$orderby=UpdateTime desc&$top=50&$format=JSON"
+    
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
 
     try:
-        for page in pages_to_scrape:
-            url = f"{base_url}{page}"
-            print(f"正在爬取頁面: {url}")
-            response = requests.get(url, headers=headers, timeout=15)
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.text, 'lxml')
-            all_incidents.extend(soup.find_all('div', class_='w3-col l3 m6'))
+        response = requests.get(road_event_url, headers=headers, timeout=15)
+        response.raise_for_status()
+        
+        data = response.json()
+        incidents = data.get("LiveEvents", [])
+        
+        print(f"✅ 成功從 TDX API 獲取 {len(incidents)} 則路況事件。")
 
-        print(f"✅ 成功爬取 {len(pages_to_scrape)} 個頁面，總共找到 {len(all_incidents)} 則路況事件容器。")
+        # 3. 解析與分類資料 (這部分邏輯與之前爬蟲版本類似)
+        for incident in incidents:
+            content = incident.get("Description", "")
+            if not content:
+                continue
 
-        for incident_container in all_incidents:
-            desc_element = incident_container.find('td', text='描述')
-            if not desc_element or not desc_element.find_next_sibling('td'): continue
-            content = " ".join(desc_element.find_next_sibling('td').get_text().split())
-
-            time_element = incident_container.find('td', text='時間')
             report_time = ""
-            if time_element and time_element.find_next_sibling('td'):
+            update_time_str = incident.get("UpdateTime")
+            if update_time_str:
                 try:
-                    report_time_str = time_element.find_next_sibling('td').get_text().strip()
-                    report_time = f"通報時間: {datetime.strptime(report_time_str, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d %H:%M')}"
+                    # 將UTC時間轉換為台北時間
+                    utc_time = datetime.fromisoformat(update_time_str.replace('Z', '+00:00'))
+                    taipei_time = utc_time.astimezone(TAIPEI_TZ)
+                    report_time = f"更新時間: {taipei_time.strftime('%Y-%m-%d %H:%M')}"
                 except ValueError:
-                    report_time = f"通報時間: {datetime.now(TAIPEI_TZ).strftime('%Y-%m-%d %H:%M')}"
-            
-            detail_url = ""
-            link_element = incident_container.find('a', href=True)
-            if link_element:
-                detail_url = "https://www.1968services.tw" + link_element['href']
+                    pass
 
-            if any(keyword in content for keyword in ["台9線", "蘇花", "台9丁線"]):
-                status = "事件"; css_class = "road-yellow"; is_high_risk = False
-                
-                for keyword in high_risk_keywords:
+            # 沿用之前的狀態分類邏輯
+            status = "事件"; css_class = "road-yellow"; is_high_risk = False
+            for keyword in high_risk_keywords:
+                if keyword in content:
+                    status = keyword; css_class = "road-red"; is_high_risk = True; break
+            if not is_high_risk:
+                for keyword in mid_risk_keywords:
                     if keyword in content:
-                        status = keyword; css_class = "road-red"; is_high_risk = True; break
-                if not is_high_risk:
-                    for keyword in mid_risk_keywords:
-                        if keyword in content:
-                            status = keyword; css_class = "road-yellow"; break
-                
-                is_partial_closure = any(keyword in content for keyword in degree_keywords)
-                has_downgrade_option = any(keyword in content for keyword in downgrade_keywords)
-                if is_high_risk:
-                    if is_partial_closure:
-                        status = f"管制 ({status}單線)"; css_class = "road-yellow"
-                    elif has_downgrade_option:
-                        status = f"管制 ({status}改道)"; css_class = "road-yellow"
+                        status = keyword; css_class = "road-yellow"; break
+            
+            is_partial_closure = any(keyword in content for keyword in degree_keywords)
+            has_downgrade_option = any(keyword in content for keyword in downgrade_keywords)
+            if is_high_risk:
+                if is_partial_closure:
+                    status = f"管制 ({status}單線)"; css_class = "road-yellow"
+                elif has_downgrade_option:
+                    status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
-                # === 判斷新/舊蘇花公路的核心邏輯 ===
-                is_old_road_event = "台9丁線" in content
-                
-                new_suhua_tunnels = ["蘇澳隧道", "東澳隧道", "觀音隧道", "谷風隧道", "中仁隧道", "仁水隧道"]
-                is_new_road_event = any(tunnel in content for tunnel in new_suhua_tunnels)
-                
-                if is_new_road_event:
-                    # 如果有提到新隧道的名稱，就絕對是新路
-                    is_old_road_event = False
-                elif not is_old_road_event:
-                    # 如果沒有明確標示為台9丁，也不是新隧道，則啟用公里數判斷
-                    km_match = re.search(r'(\d+\.?\d*)[Kk]', content)
-                    if km_match:
-                        try:
-                            km = float(km_match.group(1))
-                            # 蘇花改新路段公里數範圍
-                            new_ranges = [(104, 113), (124, 145), (148, 160)]
-                            # 如果公里數「沒有」落在新路段的範圍內，就判定為舊路
-                            if not any(start <= km <= end for start, end in new_ranges):
-                                is_old_road_event = True
-                        except ValueError:
-                            pass # 如果公里數無法轉換成數字，就忽略
-                
-                # 將結果分類到對應的路段
-                for section_name, keywords in sections.items():
-                    if any(keyword in content for keyword in keywords):
-                        results[section_name].append({
-                            "section": section_name, "status": status, "class": css_class,
-                            "desc": f"（{content}）", "time": report_time, "is_old_road": is_old_road_event,
-                            "detail_url": detail_url
-                        })
-                        
+            # 判斷新舊路
+            road_name = incident.get("Location", {}).get("Road")
+            is_old_road_event = (road_name == '台9丁線') or ("台9丁線" in content)
+            
+            # 分類到對應路段
+            for section_name, keywords in sections.items():
+                if any(keyword in content for keyword in keywords):
+                    results[section_name].append({
+                        "section": section_name, "status": status, "class": css_class,
+                        "desc": f"（{content}）", "time": report_time, "is_old_road": is_old_road_event,
+                        "detail_url": "" # TDX API不直接提供詳細頁面連結
+                    })
+                    # 找到第一個符合的路段就跳出，避免重複分類
+                    break 
+
     except requests.exceptions.RequestException as e:
-        print(f"❌ 爬取網頁時發生網路錯誤: {e}")
-        error_event = { "section": "全線", "status": "爬取失敗", "class": "road-red", "desc": "無法連接路況網頁", "time": "", "is_old_road": False, "detail_url": "" }
+        print(f"❌ 獲取 TDX 路況資料失敗: {e}")
+        error_event = { "section": "全線", "status": "讀取失敗", "class": "road-red", "desc": "無法連接TDX路況伺服器", "time": "", "is_old_road": False, "detail_url": "" }
         for section_name in sections.keys():
             results[section_name].append(error_event)
             
     return results
 
+# --- FastAPI 根路由 (保持不變) ---
 @app.get("/")
 def read_root():
     return {"status": "Guardian Angel Dashboard FINAL VERSION is running."}
