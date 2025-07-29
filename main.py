@@ -247,7 +247,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
 
     print("🚀 快取過期或不存在，重新從 TDX API 獲取資料...")
     
-    # 【最終優化重點】將 "中仁隧道" 加入關鍵字列表
+    # 關鍵字定義
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
         "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
@@ -258,6 +258,10 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     mid_risk_keywords = ["落石", "施工", "管制", "事故", "壅塞", "車多", "濃霧", "作業"]
     degree_keywords = ["單線", "單側", "車道", "非全路幅", "慢車道", "機動"]
     
+    # 【三層判斷機制】的定義
+    new_suhua_landmarks = ["蘇澳隧道", "東澳隧道", "觀音隧道", "谷風隧道", "中仁隧道", "仁水隧道"]
+    new_suhua_km_ranges = [(104, 113), (124, 145), (148, 160)]
+
     results = {name: [] for name in sections.keys()}
     
     access_token = get_tdx_access_token()
@@ -267,6 +271,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         for section_name in sections.keys(): results[section_name].append(error_event)
         return results
 
+    # 【最終修正重點】使用 100% 正確的 API 路徑
     road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/News/Highway?$orderby=PublishTime desc&$top=150&$format=JSON"
     headers = {"Authorization": f"Bearer {access_token}"}
 
@@ -279,7 +284,6 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         
         print(f"✅ 成功從 TDX 公路局 API 獲取 {len(news_items)} 則最新消息。")
         
-        # 篩選出標題或內容包含 "台9" 或 "蘇花" 的消息
         suhua_news = [
             news for news in news_items 
             if "台9" in news.get("Title", "") + news.get("Description", "") or 
@@ -288,21 +292,24 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         print(f"🔍 篩選出 {len(suhua_news)} 則與蘇花路廊相關的消息。")
 
         for news in suhua_news:
-            content = news.get("Description", "")
             title = news.get("Title", "")
-            full_content = f"{title}：{content}"
+            description = news.get("Description", "")
+            full_content = f"{title}：{description}"
             
-            if not content: continue
+            if not description: continue
 
-            report_time = ""
-            update_time_str = news.get("PublishTime")
-            if update_time_str:
-                try:
-                    utc_time = datetime.fromisoformat(update_time_str.replace('Z', '+00:00'))
-                    taipei_time = utc_time.astimezone(TAIPEI_TZ)
-                    report_time = f"發布時間: {taipei_time.strftime('%Y-%m-%d %H:%M')}"
-                except (ValueError, TypeError): pass
+            # 【時間呈現優化】
+            publish_time_str = news.get("PublishTime", "")
+            update_time_str = news.get("UpdateTime", "")
+            time_display = ""
+            try:
+                update_dt = datetime.fromisoformat(update_time_str.replace('Z', '+00:00')).astimezone(TAIPEI_TZ)
+                publish_dt = datetime.fromisoformat(publish_time_str.replace('Z', '+00:00')).astimezone(TAIPEI_TZ)
+                time_display = f"更新時間: {update_dt.strftime('%m-%d %H:%M')} (首次發布於 {publish_dt.strftime('%m-%d %H:%M')})"
+            except (ValueError, TypeError):
+                time_display = "時間格式錯誤"
 
+            # 狀態分類
             status = "事件"; css_class = "road-yellow"; is_high_risk = False
             for keyword in high_risk_keywords:
                 if keyword in full_content: status = keyword; css_class = "road-red"; is_high_risk = True; break
@@ -316,31 +323,50 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                 if is_partial_closure: status = f"管制 ({status}單線)"; css_class = "road-yellow"
                 elif has_downgrade_option: status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
-            is_old_road_event = "台9丁" in full_content
-            
+            # 【新舊蘇花三層判斷邏輯】
+            is_old_road_event = False # 預設為新路
+            # 第一層：地標優先
+            if any(landmark in full_content for landmark in new_suhua_landmarks):
+                is_old_road_event = False
+            else:
+                # 第二層：公里數判斷
+                km_match = re.search(r'(\d+\.?\d*)[Kk]', full_content)
+                if km_match:
+                    try:
+                        km = float(km_match.group(1))
+                        if not any(start <= km <= end for start, end in new_suhua_km_ranges):
+                            is_old_road_event = True # 不在新路範圍內，判斷為舊路
+                    except ValueError:
+                        is_old_road_event = "台9丁" in full_content # 公里數轉換失敗，退回第三層
+                else:
+                    # 第三層：關鍵字輔助
+                    is_old_road_event = "台9丁" in full_content
+
+            # 分類到對應路段
             classified = False
             for section_name, keywords in sections.items():
                 if any(keyword in full_content for keyword in keywords):
                     results[section_name].append({
                         "section": section_name, "status": status, "class": css_class,
-                        "desc": f"（{content}）", "time": report_time, "is_old_road": is_old_road_event,
+                        "desc": f"【{title}】：({description})", # 【顯示內容優化】
+                        "time": time_display,
+                        "is_old_road": is_old_road_event,
                         "detail_url": news.get("NewsURL", "")
                     })
                     classified = True
                     break
             
             if not classified:
-                # 如果用路段關鍵字分不出來，就歸類到一個通用的「蘇花路廊」分類
-                # 這樣可以確保所有篩選出來的消息，至少都會被顯示
-                if "蘇花路廊其他路段" not in results:
-                    results["蘇花路廊其他路段"] = []
+                if "蘇花路廊其他路段" not in results: results["蘇花路廊其他路段"] = []
                 results["蘇花路廊其他路段"].append({
                     "section": "蘇花路廊其他路段", "status": status, "class": css_class,
-                    "desc": f"（{content}）", "time": report_time, "is_old_road": is_old_road_event,
+                    "desc": f"【{title}】：({description})",
+                    "time": time_display,
+                    "is_old_road": is_old_road_event,
                     "detail_url": news.get("NewsURL", "")
                 })
                 print(f"    [通用分類消息]: {title}")
-
+        
         cached_road_data = results
         last_fetch_time = time.time()
         print("🔄 路況資料已更新至快取。")
