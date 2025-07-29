@@ -208,7 +208,7 @@ async def get_cwa_typhoon_data():
     return None
 
 # ==============================================================================
-# ===== ✨ 全新！使用 TDX API 獲取路況資料的函式 ✨ =====
+# ===== ✨ 全新！使用 TDX API 獲取路況資料的函式 (最終修正版) ✨ =====
 # ==============================================================================
 def get_tdx_access_token():
     """
@@ -258,19 +258,19 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
             results[section_name].append(error_event)
         return results
 
-    # 【本次修正重點】使用正確的 v1 API 路徑
-    road_event_url = "https://tdx.transportdata.tw/api/basic/v1/Road/Event/Provincial?$filter=RoadName eq '台9線' or RoadName eq '台9丁線'&$orderby=UpdateTime desc&$top=50&$format=JSON"
+    # 【本次修正重點】使用最終正確的 v1 API 路徑
+    road_event_url = "https://tdx.transportdata.tw/api/basic/v1/Road/Event?$filter=RoadName eq '台9線' or RoadName eq '台9丁線'&$orderby=UpdateTime desc&$top=50&$format=JSON"
     
     headers = {
-        "Authorization": f"Bearer {access_token}"
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
     }
 
     try:
         response = requests.get(road_event_url, headers=headers, timeout=15)
         response.raise_for_status()
         
-        data = response.json()
-        incidents = data.get("Events", []) # 回傳的資料是 Events，不是 LiveEvents
+        incidents = response.json() # v1 的 API 直接回傳列表
         
         print(f"✅ 成功從 TDX API 獲取 {len(incidents)} 則路況事件。")
 
@@ -286,7 +286,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                     utc_time = datetime.fromisoformat(update_time_str.replace('Z', '+00:00'))
                     taipei_time = utc_time.astimezone(TAIPEI_TZ)
                     report_time = f"更新時間: {taipei_time.strftime('%Y-%m-%d %H:%M')}"
-                except ValueError:
+                except (ValueError, TypeError):
                     pass
 
             status = "事件"; css_class = "road-yellow"; is_high_risk = False
@@ -309,17 +309,26 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
             road_name = incident.get("RoadName")
             is_old_road_event = (road_name == '台9丁線') or ("台9丁線" in content)
             
+            # 分類到對應路段
+            classified = False
             for section_name, keywords in sections.items():
                 if any(keyword in content for keyword in keywords):
                     results[section_name].append({
                         "section": section_name, "status": status, "class": css_class,
                         "desc": f"（{content}）", "time": report_time, "is_old_road": is_old_road_event,
-                        "detail_url": ""
+                        "detail_url": "" 
                     })
-                    break 
+                    classified = True
+                    break # 只歸類到第一個符合的路段
+            
+            if not classified:
+                print(f"    [未分類事件]: {content}")
+
 
     except requests.exceptions.RequestException as e:
         print(f"❌ 獲取 TDX 路況資料失敗: {e}")
+        if e.response:
+            print(f"    錯誤細節: {e.response.text}")
         error_event = { "section": "全線", "status": "讀取失敗", "class": "road-red", "desc": "無法連接TDX路況伺服器", "time": "", "is_old_road": False, "detail_url": "" }
         for section_name in sections.keys():
             results[section_name].append(error_event)
