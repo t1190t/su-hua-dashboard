@@ -25,10 +25,10 @@ app.add_middleware(
 )
 
 # ==============================================================================
-# ===== ✨ 請再次確認您已填入正確的 TDX 金鑰 (並用雙引號包起來) ✨ =====
+# ===== ✨ 請在這裡填入您剛剛在 PowerShell 中驗證成功的新金鑰 ✨ =====
 # ==============================================================================
-TDX_APP_ID = "t1190t-d57e05ff-dc8c-4bc1f"  # 請替換成您的 APP ID
-TDX_APP_KEY = "68276435-02a9-401d-8a09-636739b38cf7" # 請替換成您的 APP KEY
+TDX_APP_ID = "t1190t-64266cda-41c7-451f"  # 請替換成您的 APP ID
+TDX_APP_KEY = "0d5f5de8-ab0b-4d28-a573-92a3406c178c" # 請替換成您的 APP KEY
 # ==============================================================================
 
 CWA_API_KEY = os.environ.get('CWA_API_KEY', 'CWA-B3D5458A-4530-4045-A702-27A786C1E934')
@@ -43,7 +43,7 @@ CACHE_DURATION_SECONDS = 300  # 快取持續時間 (300秒 = 5分鐘)
 # ==============================================================================
 
 
-# --- Helper Functions ---
+# --- Helper Functions (保持不變) ---
 def get_rain_level(value: float) -> tuple[str, str, str]:
     if value < 0: return "資料異常", "rain-red", "資料異常"
     if value > 200: return "🟥 豪大雨", "rain-red", "豪大雨"
@@ -53,7 +53,7 @@ def get_rain_level(value: float) -> tuple[str, str, str]:
     if value > 0: return "🟩 小雨", "rain-green", "小雨"
     return "⬜️ 無雨", "rain-none", "無雨"
 
-# --- API 路由定義 ---
+# --- API 路由定義 (保持不變) ---
 @app.get("/api/dashboard-data")
 async def get_dashboard_data() -> Dict[str, Any]:
     current_time = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d %H:%M:%S")
