@@ -260,8 +260,8 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
             results[section_name].append(error_event)
         return results
 
-    # 【本次修正重點】使用您找到的、最正確的「公路消息 v2 API」路徑
-    road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/News/Road/Provincial?$filter=contains(RoadName,'台9')&$orderby=PublishTime desc&$top=50&$format=JSON"
+    # 【本次修正重點】使用最終正確的「公路消息 v2 API」路徑
+    road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/News/Highway?$filter=contains(RoadName,'台9')&$orderby=PublishTime desc&$top=50&$format=JSON"
     
     headers = {
         "Authorization": f"Bearer {access_token}"
@@ -272,17 +272,17 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         response.raise_for_status()
         
         data = response.json()
-        news_items = data.get("Newses", []) # 根據 Swagger，v2 的資料在 "Newses" 欄位中
+        news_items = data.get("Newses", [])
         
         print(f"✅ 成功從 TDX API 獲取 {len(news_items)} 則路況消息。")
 
         for news in news_items:
-            content = news.get("Description", "") # 描述欄位是 Description
+            content = news.get("Description", "")
             if not content:
                 continue
 
             report_time = ""
-            update_time_str = news.get("PublishTime") # 使用發布時間
+            update_time_str = news.get("PublishTime")
             if update_time_str:
                 try:
                     utc_time = datetime.fromisoformat(update_time_str.replace('Z', '+00:00'))
@@ -317,7 +317,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                     results[section_name].append({
                         "section": section_name, "status": status, "class": css_class,
                         "desc": f"（{content}）", "time": report_time, "is_old_road": is_old_road_event,
-                        "detail_url": news.get("NewsURL", "") # 可以加上消息的原始網址
+                        "detail_url": news.get("NewsURL", "")
                     })
                     classified = True
                     break
