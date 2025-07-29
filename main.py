@@ -24,10 +24,10 @@ app.add_middleware(
 )
 
 # ==============================================================================
-# ===== ✨ 請在這裡填入您申請到的 TDX 金鑰 ✨ =====
+# ===== ✨ 請再次確認您已填入正確的 TDX 金鑰 ✨ =====
 # ==============================================================================
-TDX_APP_ID = "t1190t-cb75f4a4-e514-489f"  # 請替換成您的 APP ID
-TDX_APP_KEY = "dc00bc01-dff4-47cb-97f4-88fec81e69cc" # 請替換成您的 APP KEY
+TDX_APP_ID = "t1190t-cb75f4a4-e514-489f"
+TDX_APP_KEY = "dc00bc01-dff4-47cb-97f4-88fec81e69cc"
 # ==============================================================================
 
 CWA_API_KEY = os.environ.get('CWA_API_KEY', 'CWA-B3D5458A-4530-4045-A702-27A786C1E934')
@@ -208,37 +208,44 @@ async def get_cwa_typhoon_data():
     return None
 
 # ==============================================================================
-# ===== ✨ 全新！使用 TDX API 獲取路況資料的函式 (最終權威版) ✨ =====
+# ===== ✨ 全新！使用 TDX API 獲取路況資料的函式 (官方範例版) ✨ =====
 # ==============================================================================
 def get_tdx_access_token():
     """
     步驟1: 獲取 TDX 的 Access Token
+    完全參照官方 GitHub 範例的寫法
     """
     auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
-    headers = {"content-type": "application/x-www-form-urlencoded"}
-    data = {
+    
+    # 這是要傳送的資料，grant_type 是固定的，另外兩個是您的金鑰
+    body = {
         "grant_type": "client_credentials",
-        "client_id": TDX_APP_ID,
-        "client_secret": TDX_APP_KEY,
+        "client_id": t1190t-cb75f4a4-e514-489f,
+        "client_secret": dc00bc01-dff4-47cb-97f4-88fec81e69cc,
+    }
+    # 這是要傳送的標頭，告訴伺服器我們傳送的是表單資料
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
     }
     
     try:
-        response = requests.post(auth_url, data=data, headers=headers)
-        response.raise_for_status()
+        # 發送 POST 請求
+        response = requests.post(auth_url, data=body, headers=headers)
+        response.raise_for_status() # 如果請求失敗 (如 400, 401)，會直接拋出錯誤
         token_data = response.json()
         print("✅ 成功獲取 TDX Access Token！")
         return token_data.get("access_token")
     except requests.exceptions.RequestException as e:
         print(f"❌ 獲取 TDX Access Token 失敗: {e}")
+        # 如果有收到伺服器回應，把詳細錯誤印出來，幫助我們除錯
         if e.response:
-            print(f"    錯誤細節: {e.response.text}")
+            print(f"    伺服器回應錯誤: {e.response.text}")
         return None
 
 async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     """
     步驟2: 使用 Access Token 獲取蘇花公路路況，並進行分類
     """
-    # 這是我們要用來分類的關鍵字
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
         "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
@@ -251,8 +258,6 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     
     results = {name: [] for name in sections.keys()}
     
-    # === 主要流程開始 ===
-    # 1. 獲取 Access Token
     access_token = get_tdx_access_token()
     
     if not access_token:
@@ -261,13 +266,11 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
             results[section_name].append(error_event)
         return results
 
-    # 2. 拿著 Token 去要路況資料
-    # 【本次修正重點】使用經 Swagger 驗證過的正確 API 路徑
+    # 使用經 Swagger 驗證過的 v2 API 正確路徑
     road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Incident/Road/Provincial?$filter=RoadName eq '台9線' or RoadName eq '台9丁線'&$orderby=UpdateTime desc&$top=50&$format=JSON"
     
     headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {access_token}"
     }
 
     try:
@@ -275,13 +278,12 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         response.raise_for_status()
         
         data = response.json()
-        incidents = data.get("Incidents", []) # 根據 Swagger，v2 的資料在 "Incidents" 欄位中
+        incidents = data.get("Incidents", [])
         
         print(f"✅ 成功從 TDX API 獲取 {len(incidents)} 則路況事件。")
 
-        # 3. 解析與分類資料
         for incident in incidents:
-            content = incident.get("IncidentText", "") # v2 的描述欄位是 IncidentText
+            content = incident.get("IncidentText", "")
             if not content:
                 continue
 
@@ -333,7 +335,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     except requests.exceptions.RequestException as e:
         print(f"❌ 獲取 TDX 路況資料失敗: {e}")
         if e.response:
-            print(f"    錯誤細節: {e.response.text}")
+            print(f"    伺服器回應錯誤: {e.response.text}")
         error_event = { "section": "全線", "status": "讀取失敗", "class": "road-red", "desc": "無法連接TDX路況伺服器", "time": "", "is_old_road": False, "detail_url": "" }
         for section_name in sections.keys():
             results[section_name].append(error_event)
