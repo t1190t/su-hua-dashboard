@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import warnings
 import pytz
 import re
-import time # 引入時間模組，用於快取
+import time 
 
 # 忽略 InsecureRequestWarning 警告
 from urllib3.exceptions import InsecureRequestWarning
@@ -25,7 +25,7 @@ app.add_middleware(
 )
 
 # ==============================================================================
-# ===== ✨ 請在這裡填入您剛剛在 PowerShell 中驗證成功的新金鑰 ✨ =====
+# ===== ✨ 請再次確認您已填入正確的、已驗證成功的 TDX 金鑰 ✨ =====
 # ==============================================================================
 TDX_APP_ID = "t1190t-64266cda-41c7-451f"  # 請替換成您的 APP ID
 TDX_APP_KEY = "0d5f5de8-ab0b-4d28-a573-92a3406c178c" # 請替換成您的 APP KEY
@@ -218,7 +218,7 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 # ==============================================================================
-# ===== ✨ TDX API 函式 (最終版，加入快取功能) ✨ =====
+# ===== ✨ TDX API 函式 (最終版，使用正確 API 路徑) ✨ =====
 # ==============================================================================
 def get_tdx_access_token():
     """步驟1: 獲取 TDX 的 Access Token"""
@@ -266,7 +266,9 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         for section_name in sections.keys(): results[section_name].append(error_event)
         return results
 
-    road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/News/Highway?$filter=contains(RoadName,'台9')&$orderby=PublishTime desc&$top=50&$format=JSON"
+    # 【本次修正重點】使用最終正確的「公路消息 v2 API」路徑
+    road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/News/Highway?$orderby=PublishTime desc&$top=100&$format=JSON"
+    
     headers = {"Authorization": f"Bearer {access_token}"}
 
     try:
@@ -276,9 +278,14 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         data = response.json()
         news_items = data.get("Newses", [])
         
-        print(f"✅ 成功從 TDX API 獲取 {len(news_items)} 則路況消息。")
+        print(f"✅ 成功從 TDX 公路局 API 獲取 {len(news_items)} 則最新消息。")
+        
+        # 在 Python 端進行篩選
+        suhua_news = [news for news in news_items if "台9" in news.get("RoadName", "")]
+        print(f"🔍 篩選出 {len(suhua_news)} 則與蘇花路廊 (台9線/台9丁線) 相關的消息。")
 
-        for news in news_items:
+
+        for news in suhua_news:
             content = news.get("Description", "")
             if not content: continue
 
