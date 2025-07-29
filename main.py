@@ -218,7 +218,7 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 # ==============================================================================
-# ===== ✨ TDX API 函式 (最終版，使用您驗證的正確 API 路徑) ✨ =====
+# ===== ✨ TDX API 函式 (最終優化版) ✨ =====
 # ==============================================================================
 def get_tdx_access_token():
     """步驟1: 獲取 TDX 的 Access Token"""
@@ -247,10 +247,11 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
 
     print("🚀 快取過期或不存在，重新從 TDX API 獲取資料...")
     
+    # 【最終優化重點】將 "中仁隧道" 加入關鍵字列表
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
         "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
-        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "和平隧道", "和中隧道", "和中橋", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
+        "和平-秀林": ["和平", "和仁", "崇德", "秀林", "中仁隧道", "和平隧道", "和中隧道", "和中橋", "仁水隧道", "大清水隧道", "錦文隧道", "匯德隧道", "崇德隧道", "清水斷崖", "下清水橋", "大清水"]
     }
     high_risk_keywords = ["封閉", "中斷", "坍方"]
     downgrade_keywords = ["改道", "替代道路", "行駛台9丁線", "單線雙向", "戒護通行", "放行"]
@@ -266,9 +267,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         for section_name in sections.keys(): results[section_name].append(error_event)
         return results
 
-    # 【最終修正重點】使用您提供的、100% 正確的 API 路徑
     road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/News/Highway?$orderby=PublishTime desc&$top=150&$format=JSON"
-    
     headers = {"Authorization": f"Bearer {access_token}"}
 
     try:
@@ -280,7 +279,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         
         print(f"✅ 成功從 TDX 公路局 API 獲取 {len(news_items)} 則最新消息。")
         
-        # 在 Python 端，篩選出標題或內容包含 "台9" 或 "蘇花" 的消息
+        # 篩選出標題或內容包含 "台9" 或 "蘇花" 的消息
         suhua_news = [
             news for news in news_items 
             if "台9" in news.get("Title", "") + news.get("Description", "") or 
@@ -291,7 +290,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         for news in suhua_news:
             content = news.get("Description", "")
             title = news.get("Title", "")
-            full_content = f"{title}：{content}" # 將標題和內容合併，以便更完整地比對關鍵字
+            full_content = f"{title}：{content}"
             
             if not content: continue
 
@@ -317,7 +316,6 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                 if is_partial_closure: status = f"管制 ({status}單線)"; css_class = "road-yellow"
                 elif has_downgrade_option: status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
-            # 根據 TDX 資料格式，RoadName 欄位可能不存在，所以我們主要依賴內文判斷
             is_old_road_event = "台9丁" in full_content
             
             classified = False
@@ -332,8 +330,17 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                     break
             
             if not classified:
-                print(f"    [未分類消息]: {title}")
-        
+                # 如果用路段關鍵字分不出來，就歸類到一個通用的「蘇花路廊」分類
+                # 這樣可以確保所有篩選出來的消息，至少都會被顯示
+                if "蘇花路廊其他路段" not in results:
+                    results["蘇花路廊其他路段"] = []
+                results["蘇花路廊其他路段"].append({
+                    "section": "蘇花路廊其他路段", "status": status, "class": css_class,
+                    "desc": f"（{content}）", "time": report_time, "is_old_road": is_old_road_event,
+                    "detail_url": news.get("NewsURL", "")
+                })
+                print(f"    [通用分類消息]: {title}")
+
         cached_road_data = results
         last_fetch_time = time.time()
         print("🔄 路況資料已更新至快取。")
