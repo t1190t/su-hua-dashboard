@@ -208,36 +208,33 @@ async def get_cwa_typhoon_data():
     return None
 
 # ==============================================================================
-# ===== ✨ 全新！使用 TDX API 獲取路況資料的函式 (官方範例版) ✨ =====
+# ===== ✨ 全新！使用 TDX API 獲取路況資料的函式 (最終修正版) ✨ =====
 # ==============================================================================
 def get_tdx_access_token():
     """
     步驟1: 獲取 TDX 的 Access Token
-    完全參照官方 GitHub 範例的寫法
     """
     auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
     
-    # 這是要傳送的資料，grant_type 是固定的，另外兩個是您的金鑰
+    # 【本次修正重點】這裡要使用您在程式最上方定義好的「變數」
+    # 而不是直接貼上沒有雙引號的文字
     body = {
         "grant_type": "client_credentials",
-        "client_id": t1190t-cb75f4a4-e514-489f,
-        "client_secret": dc00bc01-dff4-47cb-97f4-88fec81e69cc,
+        "client_id": TDX_APP_ID,
+        "client_secret": TDX_APP_KEY,
     }
-    # 這是要傳送的標頭，告訴伺服器我們傳送的是表單資料
     headers = {
         "Content-Type": "application/x-www-form-urlencoded"
     }
     
     try:
-        # 發送 POST 請求
         response = requests.post(auth_url, data=body, headers=headers)
-        response.raise_for_status() # 如果請求失敗 (如 400, 401)，會直接拋出錯誤
+        response.raise_for_status()
         token_data = response.json()
         print("✅ 成功獲取 TDX Access Token！")
         return token_data.get("access_token")
     except requests.exceptions.RequestException as e:
         print(f"❌ 獲取 TDX Access Token 失敗: {e}")
-        # 如果有收到伺服器回應，把詳細錯誤印出來，幫助我們除錯
         if e.response:
             print(f"    伺服器回應錯誤: {e.response.text}")
         return None
@@ -266,7 +263,6 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
             results[section_name].append(error_event)
         return results
 
-    # 使用經 Swagger 驗證過的 v2 API 正確路徑
     road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Incident/Road/Provincial?$filter=RoadName eq '台9線' or RoadName eq '台9丁線'&$orderby=UpdateTime desc&$top=50&$format=JSON"
     
     headers = {
