@@ -24,10 +24,10 @@ app.add_middleware(
 )
 
 # ==============================================================================
-# ===== ✨ 請再次確認您已填入正確的 TDX 金鑰 ✨ =====
+# ===== ✨ 請再次確認您已填入正確的 TDX 金鑰 (並用雙引號包起來) ✨ =====
 # ==============================================================================
-TDX_APP_ID = "t1190t-cb75f4a4-e514-489f"
-TDX_APP_KEY = "dc00bc01-dff4-47cb-97f4-88fec81e69cc"
+TDX_APP_ID = "t1190t-cb75f4a4-e514-489f"  # 請替換成您的 APP ID
+TDX_APP_KEY = "dc00bc01-dff4-47cb-97f4-88fec81e69cc" # 請替換成您的 APP KEY
 # ==============================================================================
 
 CWA_API_KEY = os.environ.get('CWA_API_KEY', 'CWA-B3D5458A-4530-4045-A702-27A786C1E934')
@@ -208,16 +208,13 @@ async def get_cwa_typhoon_data():
     return None
 
 # ==============================================================================
-# ===== ✨ 全新！使用 TDX API 獲取路況資料的函式 (最終修正版) ✨ =====
+# ===== ✨ TDX API 函式 (最終權威版，參照官方文件) ✨ =====
 # ==============================================================================
 def get_tdx_access_token():
     """
     步驟1: 獲取 TDX 的 Access Token
     """
     auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
-    
-    # 【本次修正重點】這裡要使用您在程式最上方定義好的「變數」
-    # 而不是直接貼上沒有雙引號的文字
     body = {
         "grant_type": "client_credentials",
         "client_id": TDX_APP_ID,
@@ -263,7 +260,8 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
             results[section_name].append(error_event)
         return results
 
-    road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Incident/Road/Provincial?$filter=RoadName eq '台9線' or RoadName eq '台9丁線'&$orderby=UpdateTime desc&$top=50&$format=JSON"
+    # 【本次修正重點】使用您找到的、最正確的「公路消息 v2 API」路徑
+    road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/News/Road/Provincial?$filter=contains(RoadName,'台9')&$orderby=PublishTime desc&$top=50&$format=JSON"
     
     headers = {
         "Authorization": f"Bearer {access_token}"
@@ -274,22 +272,22 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         response.raise_for_status()
         
         data = response.json()
-        incidents = data.get("Incidents", [])
+        news_items = data.get("Newses", []) # 根據 Swagger，v2 的資料在 "Newses" 欄位中
         
-        print(f"✅ 成功從 TDX API 獲取 {len(incidents)} 則路況事件。")
+        print(f"✅ 成功從 TDX API 獲取 {len(news_items)} 則路況消息。")
 
-        for incident in incidents:
-            content = incident.get("IncidentText", "")
+        for news in news_items:
+            content = news.get("Description", "") # 描述欄位是 Description
             if not content:
                 continue
 
             report_time = ""
-            update_time_str = incident.get("UpdateTime")
+            update_time_str = news.get("PublishTime") # 使用發布時間
             if update_time_str:
                 try:
                     utc_time = datetime.fromisoformat(update_time_str.replace('Z', '+00:00'))
                     taipei_time = utc_time.astimezone(TAIPEI_TZ)
-                    report_time = f"更新時間: {taipei_time.strftime('%Y-%m-%d %H:%M')}"
+                    report_time = f"發布時間: {taipei_time.strftime('%Y-%m-%d %H:%M')}"
                 except (ValueError, TypeError):
                     pass
 
@@ -310,7 +308,7 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                 elif has_downgrade_option:
                     status = f"管制 ({status}改道)"; css_class = "road-yellow"
 
-            road_name = incident.get("RoadName")
+            road_name = news.get("RoadName")
             is_old_road_event = (road_name == '台9丁線') or ("台9丁線" in content)
             
             classified = False
@@ -319,13 +317,13 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                     results[section_name].append({
                         "section": section_name, "status": status, "class": css_class,
                         "desc": f"（{content}）", "time": report_time, "is_old_road": is_old_road_event,
-                        "detail_url": "" 
+                        "detail_url": news.get("NewsURL", "") # 可以加上消息的原始網址
                     })
                     classified = True
                     break
             
             if not classified:
-                print(f"    [未分類事件]: {content}")
+                print(f"    [未分類消息]: {content}")
 
 
     except requests.exceptions.RequestException as e:
