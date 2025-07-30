@@ -218,7 +218,7 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
     return None
 
 # ==============================================================================
-# ===== ✨ TDX API 函式 (最終優化版) ✨ =====
+# ===== ✨ TDX API 函式 (最終集大成版) ✨ =====
 # ==============================================================================
 def get_tdx_access_token():
     """步驟1: 獲取 TDX 的 Access Token"""
@@ -271,8 +271,10 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         for section_name in sections.keys(): results[section_name].append(error_event)
         return results
 
-    # 【最終修正重點】使用 100% 正確的 API 路徑
-    road_event_url = "https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/News/Highway?$orderby=PublishTime desc&$top=150&$format=JSON"
+    # 【最終修正重點】使用 100% 正確的 API 路徑，並加入伺服器端篩選
+    filter_query = "$filter=contains(Title,'台9') or contains(Description,'台9') or contains(Title,'蘇花') or contains(Description,'蘇花')"
+    road_event_url = f"https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/News/Highway?{filter_query}&$orderby=PublishTime desc&$top=50&$format=JSON"
+    
     headers = {"Authorization": f"Bearer {access_token}"}
 
     try:
@@ -282,16 +284,9 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
         data = response.json()
         news_items = data.get("Newses", [])
         
-        print(f"✅ 成功從 TDX 公路局 API 獲取 {len(news_items)} 則最新消息。")
-        
-        suhua_news = [
-            news for news in news_items 
-            if "台9" in news.get("Title", "") + news.get("Description", "") or 
-               "蘇花" in news.get("Title", "") + news.get("Description", "")
-        ]
-        print(f"🔍 篩選出 {len(suhua_news)} 則與蘇花路廊相關的消息。")
+        print(f"✅ 成功從 TDX API 篩選並獲取 {len(news_items)} 則蘇花路廊相關消息。")
 
-        for news in suhua_news:
+        for news in news_items:
             title = news.get("Title", "")
             description = news.get("Description", "")
             full_content = f"{title}：{description}"
@@ -307,7 +302,14 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                 publish_dt = datetime.fromisoformat(publish_time_str.replace('Z', '+00:00')).astimezone(TAIPEI_TZ)
                 time_display = f"更新時間: {update_dt.strftime('%m-%d %H:%M')} (首次發布於 {publish_dt.strftime('%m-%d %H:%M')})"
             except (ValueError, TypeError):
-                time_display = "時間格式錯誤"
+                # 如果缺少其中一個時間，就只顯示有的那個
+                display_time_str = update_time_str or publish_time_str
+                if display_time_str:
+                    try:
+                        dt = datetime.fromisoformat(display_time_str.replace('Z', '+00:00')).astimezone(TAIPEI_TZ)
+                        time_display = f"時間: {dt.strftime('%m-%d %H:%M')}"
+                    except (ValueError, TypeError):
+                        time_display = "時間格式錯誤"
 
             # 狀態分類
             status = "事件"; css_class = "road-yellow"; is_high_risk = False
@@ -335,9 +337,9 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
                     try:
                         km = float(km_match.group(1))
                         if not any(start <= km <= end for start, end in new_suhua_km_ranges):
-                            is_old_road_event = True # 不在新路範圍內，判斷為舊路
+                            is_old_road_event = True
                     except ValueError:
-                        is_old_road_event = "台9丁" in full_content # 公里數轉換失敗，退回第三層
+                        is_old_road_event = "台9丁" in full_content
                 else:
                     # 第三層：關鍵字輔助
                     is_old_road_event = "台9丁" in full_content
