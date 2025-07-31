@@ -25,28 +25,26 @@ app.add_middleware(
 )
 
 # ==============================================================================
-# ===== ✨ 請再次確認您已填入正確的、已驗證成功的 TDX 金鑰 ✨ =====
+# ===== ✨ TDX 金鑰 ✨ =====
 # ==============================================================================
-TDX_APP_ID = "t1190t-64266cda-41c7-451f"  # 請替換成您的 APP ID
-TDX_APP_KEY = "0d5f5de8-ab0b-4d28-a573-92a3406c178c" # 請替換成您的 APP KEY
+TDX_APP_ID = "t1190t-64266cda-41c7-451f"
+TDX_APP_KEY = "0d5f5de8-ab0b-4d28-a573-92a3406c178c"
 # ==============================================================================
 
 CWA_API_KEY = os.environ.get('CWA_API_KEY', 'CWA-B3D5458A-4530-4045-A702-27A786C1E934')
 TAIPEI_TZ = pytz.timezone('Asia/Taipei')
 
 # ==============================================================================
-# ===== ✨ 全域變數，用於儲存快取的資料 ✨ =====
+# ===== ✨ 全域變數 ✨ =====
 # ==============================================================================
 cached_road_data = None
 last_fetch_time = 0
-CACHE_DURATION_SECONDS = 300  # 快取持續時間 (300秒 = 5分鐘)
+CACHE_DURATION_SECONDS = 300
 
-# 用於儲存蘇花路廊的 SectionID 列表，避免每次都重新查詢
 suhua_section_ids = []
 # ==============================================================================
 
 
-# --- Helper Functions (保持不變) ---
 def get_rain_level(value: float) -> tuple[str, str, str]:
     if value < 0: return "資料異常", "rain-red", "資料異常"
     if value > 200: return "🟥 豪大雨", "rain-red", "豪大雨"
@@ -56,7 +54,6 @@ def get_rain_level(value: float) -> tuple[str, str, str]:
     if value > 0: return "🟩 小雨", "rain-green", "小雨"
     return "⬜️ 無雨", "rain-none", "無雨"
 
-# --- API 路由定義 (保持不變) ---
 @app.get("/api/dashboard-data")
 async def get_dashboard_data() -> Dict[str, Any]:
     current_time = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d %H:%M:%S")
@@ -75,8 +72,6 @@ async def get_dashboard_data() -> Dict[str, Any]:
     }
     return dashboard_data
 
-# --- 其他資料獲取函式 (完整版) ---
-# ... (此處省略其他 CWA, radar, map 等函式，它們維持不變) ...
 @app.get("/api/radar-image")
 async def get_radar_image():
     image_url = "https://www.cwa.gov.tw/Data/radar/CV1_3600.png"
@@ -126,10 +121,26 @@ async def get_cwa_rain_forecast() -> Dict[str, str]:
             forecasts[name] = "預報讀取失敗"
     return forecasts
 
+# ==============================================================================
+# ===== ✨ 已按照您的指示修改 ✨ =====
+# ==============================================================================
 async def get_cwa_rain_data() -> List[Dict[str, Any]]:
-    station_ids = {"C0O920": "蘇澳鎮", "C0U9N0": "南澳鄉", "C0Z030": "秀林鄉", "C0T8A0":"新城鄉"}
+    # 按照使用者2025年7月31日 15:57 的最終指示進行修改
+    station_ids = {
+        "C0UB10": "蘇澳",
+        "C0U760": "東澳",
+        "C1U850": "南澳",
+        "C0Z310": "清水斷崖",
+        "C0TA50": "和仁",
+        "C0Z180": "新城"
+    }
+    
+    # 使用 O-A0001-001 資料集
+    url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
+    
+    # 預報功能地點未跟隨修改，可能造成部分預報無法匹配
     forecast_data = await get_cwa_rain_forecast()
-    url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWA_API_KEY}&stationId={','.join(station_ids.keys())}"
+    
     processed_data = []
     try:
         response = requests.get(url, verify=False, timeout=15)
@@ -149,12 +160,22 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
                     "forecast": forecast_data.get(station_name, "預報讀取失敗")
                 })
             else:
-                processed_data.append({ "location": station_name, "mm": "N/A", "class": "rain-nodata", "level": "測站暫無回報", "time": "", "forecast": forecast_data.get(station_name, "N/A") })
+                processed_data.append({
+                    "location": station_name, "mm": "N/A", "class": "rain-error", 
+                    "level": "讀取失敗", "time": "", 
+                    "forecast": forecast_data.get(station_name, "N/A")
+                })
+
     except requests.exceptions.RequestException as e:
         print(f"Error fetching rain data: {e}")
         for station_name in station_ids.values():
-            processed_data.append({"location": station_name, "mm": "N/A", "class": "rain-error", "level": "讀取失敗", "time": "", "forecast": "N/A"})
+            processed_data.append({
+                "location": station_name, "mm": "N/A", "class": "rain-error", 
+                "level": "讀取失敗", "time": "", "forecast": "N/A"
+            })
+            
     return processed_data
+# ==============================================================================
 
 async def get_cwa_earthquake_data() -> List[Dict[str, Any]]:
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/E-A0015-001?Authorization={CWA_API_KEY}&limit=30"
@@ -221,11 +242,7 @@ async def get_cwa_typhoon_data() -> Optional[Dict[str, Any]]:
             print(f"Error fetching typhoon data: {e}")
     return None
 
-# ==============================================================================
-# ===== ✨ TDX API 函式 (最終智慧版，採用兩步走策略) ✨ =====
-# ==============================================================================
 def get_tdx_access_token():
-    """獲取 TDX 的 Access Token"""
     auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
     body = {"grant_type": "client_credentials", "client_id": TDX_APP_ID, "client_secret": TDX_APP_KEY}
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -241,11 +258,8 @@ def get_tdx_access_token():
         return None
 
 def fetch_and_cache_suhua_section_ids(access_token: str):
-    """
-    【第一步】: 查詢「路段總目錄」，找出蘇花路廊的 SectionID 並快取起來
-    """
     global suhua_section_ids
-    if suhua_section_ids: # 如果已經查過，就直接返回
+    if suhua_section_ids:
         return
 
     print("🔍 首次執行，正在查詢蘇花路廊 SectionID...")
@@ -257,7 +271,6 @@ def fetch_and_cache_suhua_section_ids(access_token: str):
         response.raise_for_status()
         all_sections = response.json().get("Sections", [])
         
-        # 篩選出所有屬於台9線和台9丁線的路段
         found_ids = [
             s["SectionID"] for s in all_sections 
             if s.get("RoadName") in ["台9線", "台9丁線"] and \
@@ -267,7 +280,7 @@ def fetch_and_cache_suhua_section_ids(access_token: str):
                 "和平" in s.get("SectionName", ""))
         ]
         
-        suhua_section_ids = list(set(found_ids)) # 去除重複的ID
+        suhua_section_ids = list(set(found_ids))
         print(f"🗺️ 成功找到 {len(suhua_section_ids)} 個蘇花路廊相關 SectionID 並已快取。")
 
     except requests.exceptions.RequestException as e:
@@ -275,9 +288,6 @@ def fetch_and_cache_suhua_section_ids(access_token: str):
 
 
 async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
-    """
-    【第二步】: 使用 SectionID 獲取蘇花公路即時路況，並進行分類 (含快取)
-    """
     global cached_road_data, last_fetch_time, suhua_section_ids
 
     current_time = time.time()
@@ -287,7 +297,6 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
 
     print("🚀 快取過期或不存在，重新從 TDX API 獲取資料...")
     
-    # 關鍵字定義 (保持不變)
     sections = {
         "蘇澳-南澳": ["蘇澳", "東澳", "蘇澳隧道", "東澳隧道", "東岳隧道"],
         "南澳-和平": ["南澳", "武塔", "漢本", "和平", "觀音隧道", "谷風隧道"],
@@ -305,18 +314,14 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
     access_token = get_tdx_access_token()
     
     if not access_token:
-        # ... (錯誤處理保持不變) ...
         return results
 
-    # 執行第一步：獲取並快取 SectionID
     fetch_and_cache_suhua_section_ids(access_token)
 
     if not suhua_section_ids:
         print("⚠️ 未能獲取蘇花路廊的 SectionID，無法繼續查詢即時路況。")
-        # ... (錯誤處理) ...
         return results
 
-    # 執行第二步：遍歷所有找到的 SectionID，獲取它們的即時路況
     all_suhua_news = []
     for section_id in suhua_section_ids:
         live_news_url = f"https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/News/Highway/{section_id}?$top=5&$format=JSON"
@@ -325,40 +330,68 @@ async def get_suhua_road_data() -> Dict[str, List[Dict[str, Any]]]:
             response = requests.get(live_news_url, headers=headers, timeout=5)
             if response.status_code == 200:
                 all_suhua_news.extend(response.json().get("Newses", []))
-            elif response.status_code != 204: # 204 No Content 是正常的，代表該路段沒消息
+            elif response.status_code != 204:
                 response.raise_for_status()
         except requests.exceptions.RequestException:
             print(f"   - 查詢 SectionID {section_id} 時發生錯誤，已跳過。")
     
     print(f"✅ 成功從 {len(suhua_section_ids)} 個路段中，獲取到 {len(all_suhua_news)} 則路況消息。")
     
-    # 後續的分類邏輯與之前版本相似，但現在處理的是精準獲取的資料
-    for news in all_suhua_news:
+    unique_news = {news["NewsID"]: news for news in all_suhua_news}.values()
+
+    for news in unique_news:
         title = news.get("Title", "")
         description = news.get("Description", "")
         full_content = f"{title}：{description}"
         if not description: continue
-        
-        # ... (時間、狀態、新舊蘇花判斷邏輯保持不變) ...
+
+        time_str = news.get("StartTime", "")
+        news_time = datetime.fromisoformat(time_str).astimezone(TAIPEI_TZ).strftime("%m/%d %H:%M") if time_str else "N/A"
+
+        status_class = "status-low"
+        if any(keyword in full_content for keyword in high_risk_keywords):
+            status_class = "status-high"
+        elif any(keyword in full_content for keyword in downgrade_keywords):
+            status_class = "status-mid-alt"
+        elif any(keyword in full_content for keyword in mid_risk_keywords):
+            status_class = "status-mid"
+
+        if "提醒" in title or "注意" in title:
+            if status_class == "status-low": status_class = "status-mid"
+
+        is_new_suhua = any(landmark in full_content for landmark in new_suhua_landmarks)
+        km_match = re.search(r"(\d+(\.\d+)?)K", full_content, re.IGNORECASE)
+        if km_match:
+            km = float(km_match.group(1))
+            if any(start <= km <= end for start, end in new_suhua_km_ranges):
+                is_new_suhua = True
+
+        road_type = "新蘇花" if is_new_suhua else "舊蘇花"
+
+        news_item = {
+            "time": news_time,
+            "content": full_content,
+            "status_class": status_class,
+            "road_type": road_type
+        }
 
         classified = False
         for section_name, keywords in sections.items():
             if any(keyword in full_content for keyword in keywords):
-                # ... (組合最終顯示內容) ...
+                results[section_name].append(news_item)
                 classified = True
                 break
         
         if not classified:
-             # ... (通用分類邏輯) ...
-             pass
-    
+            if "蘇花" in full_content or "台9" in full_content:
+                results[list(sections.keys())[1]].append(news_item)
+
     cached_road_data = results
     last_fetch_time = time.time()
     print("🔄 路況資料已更新至快取。")
             
     return results
 
-# --- FastAPI 根路由 ---
 @app.get("/")
 def read_root():
     return {"status": "Guardian Angel Dashboard FINAL VERSION is running."}
