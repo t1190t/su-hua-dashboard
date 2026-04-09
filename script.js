@@ -1,130 +1,211 @@
-// 【‼️請務必修改此處‼️】
+// 【‼️ 請將下方網址改成你的 Render 後端網址 ‼️】
+// 範例：'https://su-hua-dashboard.onrender.com'
 const BACKEND_URL = 'https://su-hua-dashboard.onrender.com';
-
-// --- 以下程式碼不需要修改 ---
 
 document.addEventListener('DOMContentLoaded', () => {
 
-  const updateBtn = document.getElementById('updateBtn');
-  const lastUpdateElement = document.getElementById('lastUpdate');
-  const rainList = document.getElementById('rain-list');
-  const radarImage = document.getElementById('radar-image');
-  const rainfallMapImage = document.getElementById('rainfall-map-image');
-  const earthquakeList = document.getElementById('earthquake-list');
-  const roadList = document.getElementById('road-list');
-  const typhoonBox = document.getElementById('typhoon-box');
+  const updateBtn          = document.getElementById('updateBtn');
+  const lastUpdateElement  = document.getElementById('lastUpdate');
+  const rainList           = document.getElementById('rain-list');
+  const radarImage         = document.getElementById('radar-image');
+  const rainfallMapImage   = document.getElementById('rainfall-map-image');
+  const earthquakeList     = document.getElementById('earthquake-list');
+  const roadList           = document.getElementById('road-list');
+  const typhoonBox         = document.getElementById('typhoon-box');
 
   updateBtn.addEventListener('click', () => {
-    alert('已送出立即更新指令，資料將於1分鐘內刷新！');
     fetchDataAndUpdateDashboard();
   });
 
+  // ─── 主要資料抓取函式 ───────────────────────────
   async function fetchDataAndUpdateDashboard() {
-    console.log("正在從後端獲取最新資料...");
-    lastUpdateElement.textContent = '資料最後更新時間：讀取中...';
-    if (BACKEND_URL === 'YOUR_RENDER_URL_HERE' || !BACKEND_URL) {
-      alert('錯誤：後端網址尚未在 script.js 中設定！');
+    lastUpdateElement.textContent = '資料最後更新時間：讀取中…';
+
+    if (!BACKEND_URL || BACKEND_URL === 'YOUR_RENDER_URL_HERE') {
+      alert('錯誤：請先在 script.js 中填入後端網址！');
       lastUpdateElement.textContent = '錯誤：後端網址尚未設定';
       return;
     }
+
     try {
-      const response = await fetch(BACKEND_URL + '/api/dashboard-data');
-      if (!response.ok) { throw new Error(`HTTP 錯誤！ 狀態: ${response.status}`); }
-      const data = await response.json();
+      const res = await fetch(BACKEND_URL + '/api/dashboard-data');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
       updateDashboard(data);
-    } catch (error) {
-      console.error("無法獲取儀表板資料:", error);
-      alert("無法連接後端伺服器，資料讀取失敗！請檢查後端服務是否正常運作，以及前端網址設定是否正確。");
-      lastUpdateElement.textContent = '資料讀取失敗';
+    } catch (err) {
+      console.error('讀取資料失敗:', err);
+      lastUpdateElement.textContent = '資料讀取失敗，請確認後端服務是否正常運作';
     }
   }
 
+  // ─── 圖片載入（加時間戳避免瀏覽器快取舊圖）─────
+  function loadImages() {
+    const ts = Date.now();
+    radarImage.src       = `${BACKEND_URL}/api/radar-image?t=${ts}`;
+    rainfallMapImage.src = `${BACKEND_URL}/api/rainfall-map?t=${ts}`;
+
+    radarImage.onerror = () => {
+      radarImage.alt = '⚠️ 雷達圖載入失敗（後端連線中斷或氣象局暫停服務）';
+    };
+    rainfallMapImage.onerror = () => {
+      rainfallMapImage.alt = '⚠️ 累積雨量圖載入失敗';
+    };
+  }
+
+  // ─── 儀表板更新 ──────────────────────────────────
   function updateDashboard(data) {
     lastUpdateElement.textContent = `資料最後更新時間：${data.lastUpdate}`;
-    radarImage.src = BACKEND_URL + '/api/radar-image';
-    radarImage.onerror = () => { radarImage.alt = '雷達圖載入失敗'; };
-    rainfallMapImage.src = BACKEND_URL + '/api/rainfall-map';
-    rainfallMapImage.onerror = () => { rainfallMapImage.alt = '累積雨量圖載入失敗'; };
+    loadImages();
+    renderRain(data.rainInfo || []);
+    renderEarthquake(data.earthquakeInfo || []);
+    renderRoad(data.roadInfo || {});
+    renderTyphoon(data.typhoonInfo);
+  }
 
+  // ─── 雨量 ─────────────────────────────────────────
+  function renderRain(rainInfo) {
     rainList.innerHTML = '';
-    if (data.rainInfo && data.rainInfo.length > 0) {
-      data.rainInfo.forEach(item => {
-        const li = document.createElement('li');
-        let display_mm = ''; let display_level = item.level;
-        if (item.mm === "N/A") { display_mm = ''; }
-        else if (parseFloat(item.mm) === 0) { display_mm = '0 mm'; display_level = '過去 24 小時無降雨'; }
-        else { display_mm = `${item.mm} mm`; }
-        const time_display = item.time ? `（${item.time}）` : '';
-        let forecast_html = '';
-        if (item.forecast) {
-            let forecast_class = 'forecast-safe';
-            if (item.forecast.includes('%') && parseInt(item.forecast) > 50) { forecast_class = 'forecast-warning'; }
-            if (item.forecast.includes('失敗')) { forecast_class = 'forecast-error'; }
-            forecast_html = `<div class="forecast-line ${forecast_class}">└── 未來 6 小時預估：${item.forecast}</div>`;
-        }
-        li.innerHTML = `<div>${item.location}：<span class="rain-mm ${item.class}">${display_mm}</span> ${display_level} <span class="data-time">${time_display}</span></div>${forecast_html}`;
-        rainList.appendChild(li);
-      });
+    if (!rainInfo.length) {
+      rainList.innerHTML = '<li>雨量資料讀取失敗</li>';
+      return;
     }
-
-    earthquakeList.innerHTML = '';
-    if (data.earthquakeInfo && data.earthquakeInfo.length > 0) {
-      data.earthquakeInfo.forEach(item => {
-        const li = document.createElement('li');
-        li.innerHTML = `<strong>${item.time}</strong>　
-                        震央：${item.location}　規模：${item.magnitude}　深度：${item.depth}km　
-                        花蓮縣：${item.hualien_level}級　宜蘭縣：${item.yilan_level}級　
-                        <span class="data-time">${item.data_time ? `（${item.data_time}）` : ''}</span>`;
-        earthquakeList.appendChild(li);
-      });
-    } else {
+    rainInfo.forEach(item => {
       const li = document.createElement('li');
-      li.textContent = '過去 72 小時內蘇花沿線無顯著有感地震。';
+      let mmText = '', levelText = item.level;
+
+      if (item.mm === 'N/A') {
+        mmText = '';
+      } else if (parseFloat(item.mm) === 0) {
+        mmText = '0 mm';
+        levelText = '過去 24 小時無降雨';
+      } else {
+        mmText = `${item.mm} mm`;
+      }
+
+      const timeHtml = item.time ? `<span class="data-time">（${item.time}）</span>` : '';
+      let forecastHtml = '';
+      if (item.forecast) {
+        let fClass = 'forecast-safe';
+        if (item.forecast.includes('%') && parseInt(item.forecast) > 50) fClass = 'forecast-warning';
+        if (item.forecast.includes('失敗')) fClass = 'forecast-error';
+        forecastHtml = `<div class="forecast-line ${fClass}">└── 未來 6 小時：${item.forecast}</div>`;
+      }
+
+      li.innerHTML = `<div>${item.location}：<span class="rain-mm ${item.class}">${mmText}</span> ${levelText} ${timeHtml}</div>${forecastHtml}`;
+      rainList.appendChild(li);
+    });
+  }
+
+  // ─── 地震 ─────────────────────────────────────────
+  function renderEarthquake(eqInfo) {
+    earthquakeList.innerHTML = '';
+
+    if (!eqInfo.length) {
+      const li = document.createElement('li');
+      li.className = 'eq-none';
+      li.textContent = '✅ 過去 72 小時內，宜蘭、花蓮、台東無有感地震（2 級以上）';
       earthquakeList.appendChild(li);
+      return;
     }
 
-    // 【修改處】升級路況顯示邏輯，以處理所有最終優化
-    roadList.innerHTML = '';
-    const roadSections = data.roadInfo || {};
-    let totalIncidents = 0;
-    const displayOrder = ["蘇澳-南澳", "南澳-和平", "和平-秀林"];
+    eqInfo.forEach(item => {
+      const li = document.createElement('li');
+      const linkHtml = item.report_url
+        ? ` <a href="${item.report_url}" target="_blank" class="detail-link">[詳細報告]</a>`
+        : '';
 
-    displayOrder.forEach(sectionName => {
-      const incidents = roadSections[sectionName] || [];
-      if (incidents.length > 0) {
-        totalIncidents += incidents.length;
-        incidents.forEach(item => {
-          const li = document.createElement('li');
-          const oldRoadTag = item.is_old_road ? `<span class="old-road-tag">(舊蘇花)</span>` : "";
-          const sectionTitle = item.section || sectionName;
-          const detailLink = item.detail_url ? ` <a href="${item.detail_url}" target="_blank" class="detail-link">[詳細資訊]</a>` : "";
-          
-          li.innerHTML = `<div>${sectionTitle} ${oldRoadTag}：<span class="road-status ${item.class}">${item.status}</span></div>
-                          <div class="road-desc">${item.desc} <span class="data-time">${item.time ? `${item.time}` : ''}</span>${detailLink}</div>`;
-          roadList.appendChild(li);
-        });
-      }
+      // 各縣市震度標籤
+      const levelBadge = (name, level) => {
+        const n = parseInt(level);
+        let cls = n >= 5 ? 'eq-level-high' : (n >= 3 ? 'eq-level-mid' : 'eq-level-low');
+        return `<span class="eq-badge ${cls}">${name} ${n > 0 ? level + '級' : '—'}</span>`;
+      };
+
+      li.innerHTML = `
+        <div class="eq-time">${item.time}</div>
+        <div class="eq-main">
+          震央：${item.location}　
+          規模 <strong>M${item.magnitude}</strong>　
+          深度 ${item.depth} km
+          ${linkHtml}
+        </div>
+        <div class="eq-levels">
+          ${levelBadge('宜蘭縣', item.yilan_level)}
+          ${levelBadge('花蓮縣', item.hualien_level)}
+          ${levelBadge('台東縣', item.taitung_level)}
+        </div>`;
+      earthquakeList.appendChild(li);
+    });
+  }
+
+  // ─── 路況 ─────────────────────────────────────────
+  function renderRoad(roadSections) {
+    roadList.innerHTML = '';
+    const displayOrder = ['蘇澳－南澳', '南澳－和平', '和平－秀林'];
+    let total = 0;
+
+    displayOrder.forEach(sname => {
+      const incidents = roadSections[sname] || [];
+      if (!incidents.length) return;
+
+      total += incidents.length;
+      incidents.forEach(item => {
+        const li = document.createElement('li');
+        const oldTag   = item.is_old_road
+          ? '<span class="old-road-tag">（舊蘇花）</span>'
+          : '<span class="new-road-tag">（新蘇花）</span>';
+        const linkHtml = item.detail_url
+          ? ` <a href="${item.detail_url}" target="_blank" class="detail-link">[詳細資訊]</a>`
+          : '';
+
+        li.innerHTML = `
+          <div>${sname} ${oldTag}：<span class="road-status ${item.class}">${item.status}</span></div>
+          <div class="road-desc">${item.desc}</div>
+          <div class="data-time">${item.time}${linkHtml}</div>`;
+        roadList.appendChild(li);
+      });
     });
 
-    if (totalIncidents === 0) {
+    // 有「其他蘇花路段」也顯示
+    const others = roadSections['其他蘇花路段'] || [];
+    if (others.length) {
+      total += others.length;
+      others.forEach(item => {
         const li = document.createElement('li');
-        li.innerHTML = `蘇澳-秀林 全線：<span class="road-status road-green">正常通行</span>`;
+        const linkHtml = item.detail_url
+          ? ` <a href="${item.detail_url}" target="_blank" class="detail-link">[詳細資訊]</a>`
+          : '';
+        li.innerHTML = `
+          <div>其他路段：<span class="road-status ${item.class}">${item.status}</span></div>
+          <div class="road-desc">${item.desc}</div>
+          <div class="data-time">${item.time}${linkHtml}</div>`;
         roadList.appendChild(li);
+      });
     }
 
-
-    if (data.typhoonInfo) {
-      typhoonBox.style.background = '#f3f4f6';
-      typhoonBox.innerHTML = `<div><b>${data.typhoonInfo.name}</b></div>
-                            <div>${data.typhoonInfo.warning_type}｜更新時間：${data.typhoonInfo.update_time}</div>
-                            <div>中心位置：${data.typhoonInfo.location}　最大風速：${data.typhoonInfo.wind_speed}</div>
-                            <div>警報狀態：${data.typhoonInfo.status}</div>
-                            <div><img src="${data.typhoonInfo.img_url}" alt="颱風路徑圖" width="100%"></div>`;
-    } else {
-      typhoonBox.style.background = 'none';
-      typhoonBox.innerHTML = '目前暫無颱風警報';
+    if (total === 0) {
+      const li = document.createElement('li');
+      li.innerHTML = '蘇澳－秀林 全線：<span class="road-status road-green">✅ 目前無異常事件</span>';
+      roadList.appendChild(li);
     }
   }
 
+  // ─── 颱風 ─────────────────────────────────────────
+  function renderTyphoon(info) {
+    if (info) {
+      typhoonBox.style.background = '#fff7ed';
+      typhoonBox.innerHTML = `
+        <div class="typhoon-name">🌀 ${info.name}</div>
+        <div>${info.warning_type}｜更新時間：${info.update_time}</div>
+        <div>中心位置：${info.location}　最大風速：${info.wind_speed} m/s</div>
+        <div class="typhoon-status">${info.status}</div>
+        <div><img src="${info.img_url}" alt="颱風路徑圖" width="100%" style="border-radius:8px;margin-top:8px;"></div>`;
+    } else {
+      typhoonBox.style.background = 'none';
+      typhoonBox.innerHTML = '✅ 目前無颱風警報';
+    }
+  }
+
+  // ─── 頁面載入時立即執行 ───────────────────────────
   fetchDataAndUpdateDashboard();
 });
