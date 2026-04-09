@@ -137,43 +137,50 @@ async def get_cwa_rain_forecast() -> Dict[str, str]:
 
 
 async def get_cwa_rain_data() -> List[Dict[str, Any]]:
-    # 目標測站 ID → 顯示名稱對照（對應蘇花沿線四個鄉鎮）
-    station_ids = {
-        "C0O920": "蘇澳鎮",
-        "C0U9N0": "南澳鄉",
-        "C0Z030": "秀林鄉",
-        "C0T8A0": "新城鄉",
-    }
+    # 目標：蘇花沿線四個鄉鎮，以「縣市+鄉鎮」配對測站
+    # 不依賴 StationId（因 API limit=1000 會截斷，ID 可能不在前 1000 筆）
+    targets = [
+        ("宜蘭縣", "蘇澳鎮", "蘇澳鎮"),
+        ("宜蘭縣", "南澳鄉", "南澳鄉"),
+        ("花蓮縣", "秀林鄉", "秀林鄉"),
+        ("花蓮縣", "新城鄉", "新城鄉"),
+    ]
+    # (CountyName, TownName) → 顯示名稱
+    target_map = {(c, t): label for c, t, label in targets}
+    display_order = [label for _, _, label in targets]
 
     forecast_data = await get_cwa_rain_forecast()
 
-    # 一次撈全部站點（stationId 過濾參數無效，在 Python 端過濾）
+    # 不帶 limit，讓 API 傳回全部；或帶超大 limit
     url = (f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001"
-           f"?Authorization={CWA_API_KEY}&limit=1000")
+           f"?Authorization={CWA_API_KEY}&limit=2000")
 
-    processed: List[Dict[str, Any]] = []
+    # 先用 None 佔位，確保順序固定
+    found: Dict[str, Any] = {}
+
     try:
-        r = requests.get(url, verify=False, timeout=15)
+        r = requests.get(url, verify=False, timeout=20)
         r.raise_for_status()
-        data = r.json()
+        all_stations = r.json().get("records", {}).get("Station", [])
+        print(f"[rain] 共取得 {len(all_stations)} 個測站")
 
-        # ★ 正確的結構：records.Station（不是 records.location）
-        all_stations = data.get("records", {}).get("Station", [])
+        for s in all_stations:
+            geo   = s.get("GeoInfo", {})
+            county = geo.get("CountyName", "")
+            town   = geo.get("TownName", "")
+            key    = (county, town)
+            label  = target_map.get(key)
 
-        # 建立 StationId → 站點資料 的字典
-        stations_data = {s["StationId"]: s for s in all_stations}
-        print(f"[rain] 共取得 {len(stations_data)} 個測站")
+            # 每個鄉鎮只取第一個匹配的測站
+            if label and label not in found:
+                rain_val_str = (s.get("RainfallElement", {})
+                                 .get("Past24hr", {})
+                                 .get("Precipitation", "-1"))
+                try:
+                    rain_val = float(rain_val_str)
+                except ValueError:
+                    rain_val = -1.0
 
-        for sid, display_name in station_ids.items():
-            s = stations_data.get(sid)
-            if s:
-                # ★ 正確欄位：RainfallElement.Past24hr.Precipitation
-                rain_val_str = s.get("RainfallElement", {}) \
-                                .get("Past24hr", {}) \
-                                .get("Precipitation", "-1")
-                rain_val = float(rain_val_str)
-
-                # ★ 正確時間欄位：ObsTime.DateTime
                 obs_time_str = s.get("ObsTime", {}).get("DateTime", "")
                 try:
                     obs_time = (datetime.fromisoformat(obs_time_str)
@@ -182,37 +189,43 @@ async def get_cwa_rain_data() -> List[Dict[str, Any]]:
                     obs_time = ""
 
                 level_text, css_class, _ = get_rain_level(rain_val)
-
-                processed.append({
-                    "location": display_name,
+                found[label] = {
+                    "location": label,
                     "mm":       rain_val,
                     "class":    css_class,
                     "level":    level_text,
                     "time":     obs_time,
-                    "forecast": forecast_data.get(display_name, "N/A"),
-                })
-                print(f"[rain] {display_name} ({sid}): {rain_val} mm")
-            else:
-                print(f"[rain] 找不到測站 {sid} ({display_name})")
-                processed.append({
-                    "location": display_name,
-                    "mm":       "N/A",
-                    "class":    "rain-nodata",
-                    "level":    "測站暫無回報",
-                    "time":     "",
-                    "forecast": forecast_data.get(display_name, "N/A"),
-                })
+                    "forecast": forecast_data.get(label, "N/A"),
+                    "_sid":     s.get("StationId", ""),
+                    "_name":    s.get("StationName", ""),
+                }
+                print(f"[rain] ✅ {label} → {s.get('StationName')} ({s.get('StationId')}): {rain_val} mm")
 
     except Exception as e:
         print(f"[rain] 讀取失敗: {e}")
-        for display_name in station_ids.values():
+
+    # 按固定順序輸出，沒找到的補 nodata
+    processed: List[Dict[str, Any]] = []
+    for label in display_order:
+        if label in found:
+            item = found[label]
             processed.append({
-                "location": display_name,
+                "location": item["location"],
+                "mm":       item["mm"],
+                "class":    item["class"],
+                "level":    item["level"],
+                "time":     item["time"],
+                "forecast": item["forecast"],
+            })
+        else:
+            print(f"[rain] ❌ 找不到 {label} 的測站")
+            processed.append({
+                "location": label,
                 "mm":       "N/A",
-                "class":    "rain-error",
-                "level":    "讀取失敗",
+                "class":    "rain-nodata",
+                "level":    "測站暫無回報",
                 "time":     "",
-                "forecast": "N/A",
+                "forecast": forecast_data.get(label, "N/A"),
             })
 
     return processed
