@@ -40,17 +40,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ─── 圖片載入（加時間戳避免瀏覽器快取舊圖）─────
   function loadImages() {
-    const ts = Date.now();
-    radarImage.src       = `${BACKEND_URL}/api/radar-image?t=${ts}`;
-    rainfallMapImage.src = `${BACKEND_URL}/api/rainfall-map?t=${ts}`;
+  const ts = Date.now();
 
-    radarImage.onerror = () => {
-      radarImage.alt = '⚠️ 雷達圖載入失敗（後端連線中斷或氣象局暫停服務）';
-    };
-    rainfallMapImage.onerror = () => {
-      rainfallMapImage.alt = '⚠️ 累積雨量圖載入失敗';
-    };
-  }
+  // 直接從氣象局載入，不經過後端，速度更快也更穩定
+  radarImage.src = `https://www.cwa.gov.tw/Data/radar/CV1_3600.png?t=${ts}`;
+  rainfallMapImage.src = `https://c1.1968services.tw/map-data/O-A0040-002.jpg?t=${ts}`;
+
+  radarImage.onerror = () => {
+    // 第一個來源失敗，換備用雷達圖
+    radarImage.onerror = null;
+    radarImage.src = `https://www.cwa.gov.tw/Data/radar/CV2_3600.png?t=${ts}`;
+    radarImage.onerror = () => { radarImage.alt = '⚠️ 氣象局雷達圖暫時無法載入'; };
+  };
+  rainfallMapImage.onerror = () => {
+    rainfallMapImage.alt = '⚠️ 累積雨量圖暫時無法載入';
+  };
+}
 
   // ─── 儀表板更新 ──────────────────────────────────
   function updateDashboard(data) {
