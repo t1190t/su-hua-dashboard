@@ -112,27 +112,38 @@ async def get_rainfall_map():
 # 雨量資料
 # ─────────────────────────────────────────────
 async def get_cwa_rain_forecast() -> Dict[str, str]:
-    location_names = "蘇澳鎮,南澳鄉,秀林鄉,新城鄉"
-    url = (f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091"
-           f"?Authorization={CWA_API_KEY}&locationName={location_names}&elementName=PoP6h")
+    # F-D0047-091 不支援鄉鎮名稱篩選，改用縣級 36 小時預報 (F-C0032-001)
+    # 宜蘭縣 → 蘇澳鎮、南澳鄉；花蓮縣 → 秀林鄉、新城鄉
+    county_to_labels = {
+        "宜蘭縣": ["蘇澳鎮", "南澳鄉"],
+        "花蓮縣": ["秀林鄉", "新城鄉"],
+    }
+    url = (f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001"
+           f"?Authorization={CWA_API_KEY}&locationName=宜蘭縣,花蓮縣")
     forecasts: Dict[str, str] = {}
     try:
         r = requests.get(url, verify=False, timeout=15)
         r.raise_for_status()
         locations = r.json().get("records", {}).get("location", [])
         for loc in locations:
-            name = loc.get("locationName")
-            pop6h = next((el for el in loc.get("weatherElement", [])
-                          if el.get("elementName") == "PoP6h"), None)
-            if pop6h and pop6h.get("time"):
-                val = int(pop6h["time"][0]["parameter"]["parameterValue"])
-                forecasts[name] = "無明顯降雨" if val <= 10 else f"{val}% 機率降雨"
-            else:
-                forecasts[name] = "預報資料異常"
+            county = loc.get("locationName", "")
+            labels = county_to_labels.get(county, [])
+            if not labels:
+                continue
+            pop_el = next((el for el in loc.get("weatherElement", [])
+                           if el.get("elementName") == "PoP"), None)
+            if pop_el and pop_el.get("time"):
+                val_str = pop_el["time"][0]["parameter"]["parameterName"]
+                try:
+                    val = int(val_str)
+                    text = "無明顯降雨" if val <= 10 else f"{val}% 機率降雨"
+                except ValueError:
+                    text = val_str
+                for label in labels:
+                    forecasts[label] = text
+        print(f"[rain-forecast] 縣級預報: {forecasts}")
     except Exception as e:
         print(f"[rain-forecast] {e}")
-        for n in location_names.split(","):
-            forecasts[n] = "預報讀取失敗"
     return forecasts
 
 
