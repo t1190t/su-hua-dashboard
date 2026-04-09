@@ -17,7 +17,6 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchDataAndUpdateDashboard();
   });
 
-  // ─── 主要資料抓取函式 ───────────────────────────
   async function fetchDataAndUpdateDashboard() {
     lastUpdateElement.textContent = '資料最後更新時間：讀取中…';
 
@@ -38,26 +37,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // ─── 圖片載入（加時間戳避免瀏覽器快取舊圖）─────
   function loadImages() {
-  const ts = Date.now();
+    const ts = Date.now();
+    radarImage.src = `https://www.cwa.gov.tw/Data/radar/CV1_3600.png?t=${ts}`;
+    rainfallMapImage.src = `https://c1.1968services.tw/map-data/O-A0040-002.jpg?t=${ts}`;
+    radarImage.onerror = () => {
+      radarImage.onerror = null;
+      radarImage.src = `https://www.cwa.gov.tw/Data/radar/CV2_3600.png?t=${ts}`;
+      radarImage.onerror = () => { radarImage.alt = '⚠️ 氣象局雷達圖暫時無法載入'; };
+    };
+    rainfallMapImage.onerror = () => {
+      rainfallMapImage.alt = '⚠️ 累積雨量圖暫時無法載入';
+    };
+  }
 
-  // 直接從氣象局載入，不經過後端，速度更快也更穩定
-  radarImage.src = `https://www.cwa.gov.tw/Data/radar/CV1_3600.png?t=${ts}`;
-  rainfallMapImage.src = `https://c1.1968services.tw/map-data/O-A0040-002.jpg?t=${ts}`;
-
-  radarImage.onerror = () => {
-    // 第一個來源失敗，換備用雷達圖
-    radarImage.onerror = null;
-    radarImage.src = `https://www.cwa.gov.tw/Data/radar/CV2_3600.png?t=${ts}`;
-    radarImage.onerror = () => { radarImage.alt = '⚠️ 氣象局雷達圖暫時無法載入'; };
-  };
-  rainfallMapImage.onerror = () => {
-    rainfallMapImage.alt = '⚠️ 累積雨量圖暫時無法載入';
-  };
-}
-
-  // ─── 儀表板更新 ──────────────────────────────────
   function updateDashboard(data) {
     lastUpdateElement.textContent = `資料最後更新時間：${data.lastUpdate}`;
     loadImages();
@@ -67,7 +60,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTyphoon(data.typhoonInfo);
   }
 
-  // ─── 雨量 ─────────────────────────────────────────
   function renderRain(rainInfo) {
     rainList.innerHTML = '';
     if (!rainInfo.length) {
@@ -88,11 +80,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const timeHtml = item.time ? `<span class="data-time">（${item.time}）</span>` : '';
+
+      // 只在有實際預報內容時才顯示，N/A 或讀取失敗不顯示
       let forecastHtml = '';
-      if (item.forecast) {
+      if (item.forecast && item.forecast !== 'N/A' && !item.forecast.includes('讀取失敗') && !item.forecast.includes('資料異常')) {
         let fClass = 'forecast-safe';
         if (item.forecast.includes('%') && parseInt(item.forecast) > 50) fClass = 'forecast-warning';
-        if (item.forecast.includes('失敗')) fClass = 'forecast-error';
         forecastHtml = `<div class="forecast-line ${fClass}">└── 未來 6 小時：${item.forecast}</div>`;
       }
 
@@ -101,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ─── 地震 ─────────────────────────────────────────
   function renderEarthquake(eqInfo) {
     earthquakeList.innerHTML = '';
 
@@ -119,7 +111,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ? ` <a href="${item.report_url}" target="_blank" class="detail-link">[詳細報告]</a>`
         : '';
 
-      // 各縣市震度標籤
       const levelBadge = (name, level) => {
         const n = parseInt(level);
         let cls = n >= 5 ? 'eq-level-high' : (n >= 3 ? 'eq-level-mid' : 'eq-level-low');
@@ -143,7 +134,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ─── 路況 ─────────────────────────────────────────
   function renderRoad(roadSections) {
     roadList.innerHTML = '';
     const displayOrder = ['蘇澳－南澳', '南澳－和平', '和平－秀林'];
@@ -171,7 +161,6 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
-    // 有「其他蘇花路段」也顯示
     const others = roadSections['其他蘇花路段'] || [];
     if (others.length) {
       total += others.length;
@@ -195,7 +184,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // ─── 颱風 ─────────────────────────────────────────
   function renderTyphoon(info) {
     if (info) {
       typhoonBox.style.background = '#fff7ed';
@@ -211,6 +199,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // ─── 頁面載入時立即執行 ───────────────────────────
   fetchDataAndUpdateDashboard();
 });
