@@ -203,7 +203,7 @@ async def get_hospital_data():
 
     cached_hospital_data = result
     hospital_cache_time  = time.time()
-    print(f"[hospital] ✅ 快取已更新：{total_missions} 筆，{total_hospitals} 家")
+    print(f"[hospital] ✅ 快取已更新了：{total_missions} 筆，{total_hospitals} 家")
     return result
 
 
