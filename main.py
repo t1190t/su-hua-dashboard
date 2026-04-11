@@ -30,7 +30,7 @@ TDX_APP_ID     = os.environ.get('TDX_APP_ID',  't1190t-64266cda-41c7-451f')
 TDX_APP_KEY    = os.environ.get('TDX_APP_KEY', '0d5f5de8-ab0b-4d28-a573-92a3406c178c')
 CWA_API_KEY    = os.environ.get('CWA_API_KEY', 'CWA-B3D5458A-4530-4045-A702-27A786C1E934')
 GOOGLE_SA_JSON = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON', '')
-SHEET_ID       = '1t797ErDSim3OlDSMNdwnb6NGgTbBkH19'
+SHEET_ID       = '1oG1ydRWD7eELqB2myuoECuQFTffkCGqirwROLe3SXcE'
 
 TAIPEI_TZ = pytz.timezone('Asia/Taipei')
 
