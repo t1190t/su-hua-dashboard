@@ -100,62 +100,91 @@ async def get_hospital_data():
         )
         gc = gspread.authorize(creds)
         sh = gc.open_by_key(SHEET_ID)
-        ws = sh.worksheet("外接出勤")
-        rows = ws.get_all_values()
-        print(f"[hospital] 讀取到 {len(rows)} 列（含標題）")
     except Exception as e:
-        print(f"[hospital] Sheets 讀取失敗: {e}")
+        print(f"[hospital] Sheets 授權失敗: {e}")
         return {"error": str(e), "DB": {}, "TIME_DB": {}, "stats": {}}
 
-    if len(rows) < 2:
-        return {"error": "資料表為空", "DB": {}, "TIME_DB": {}, "stats": {}}
+    outbound_rows = []
+    transfer_rows = []
+    
+    # 分別讀取兩個工作表
+    try:
+        ws_out = sh.worksheet("外接出勤")
+        outbound_rows = ws_out.get_all_values()
+    except Exception as e:
+        print(f"[hospital] 外接出勤讀取失敗: {e}")
 
-    headers = rows[0]
-    col = {h.strip(): i for i, h in enumerate(headers)}
-
-    def get_cell(row, name):
-        idx = col.get(name)
-        if idx is None or idx >= len(row):
-            return ""
-        return row[idx].strip()
+    try:
+        ws_trans = sh.worksheet("轉出")
+        transfer_rows = ws_trans.get_all_values()
+    except Exception as e:
+        print(f"[hospital] 轉出讀取失敗: {e}")
 
     DB: Dict[str, Any] = {}
     time_records: Dict[str, list] = {}
+    outbound_count = 0
+    transfer_count = 0
 
-    for row in rows[1:]:
-        name = get_cell(row, "轉出院所名稱")
-        if not name:
-            continue
+    # 共用的資料處理函數
+    def process_data(rows, hosp_col_name, mission_type):
+        nonlocal outbound_count, transfer_count
+        if len(rows) < 2:
+            return
+        headers = rows[0]
+        col = {h.strip(): i for i, h in enumerate(headers)}
 
-        date_fmt = _format_date(get_cell(row, "出勤日期"))
-        county   = get_cell(row, "出勤縣市")
-        unit     = get_cell(row, "轉出單位")
-        phone    = get_cell(row, "轉出醫院之電話")
-        contact  = get_cell(row, "對方聯絡人")
+        def get_cell(row, name):
+            idx = col.get(name)
+            if idx is None or idx >= len(row):
+                return ""
+            return row[idx].strip()
 
-        if name not in DB:
-            DB[name] = {"count": 0, "county": county, "records": []}
+        for row in rows[1:]:
+            name = get_cell(row, hosp_col_name)
+            if not name:
+                continue
 
-        DB[name]["count"] += 1
-        if county:
-            DB[name]["county"] = county
-        DB[name]["records"].append({
-            "date": date_fmt, "phone": phone,
-            "contact": contact, "unit": unit, "county": county,
-        })
+            if mission_type == "outbound":
+                outbound_count += 1
+            else:
+                transfer_count += 1
 
-        # 時間統計
-        t_depart = _parse_dt(get_cell(row, "出發時間"))
-        t_arrive = _parse_dt(get_cell(row, "抵達他院時間"))
-        t_return = _parse_dt(get_cell(row, "回程時間"))
+            date_fmt = _format_date(get_cell(row, "出勤日期"))
+            county   = get_cell(row, "出勤縣市")
+            unit     = get_cell(row, "轉出單位")
+            # 嘗試抓取電話，不同表單欄位名稱可能不同，容錯處理
+            phone    = get_cell(row, "轉出醫院之電話") or get_cell(row, "轉回醫院之電話") or ""
+            contact  = get_cell(row, "對方聯絡人") or ""
 
-        if t_depart and t_arrive and t_return:
-            go_mins   = (t_arrive - t_depart).total_seconds() / 60
-            stay_mins = (t_return - t_arrive).total_seconds() / 60
-            if 0 < go_mins < 600 and 0 < stay_mins < 600:
-                if name not in time_records:
-                    time_records[name] = []
-                time_records[name].append({"go": go_mins, "stay": stay_mins, "date": date_fmt})
+            if name not in DB:
+                DB[name] = {"count": 0, "county": county, "records": []}
+
+            DB[name]["count"] += 1
+            if county:
+                DB[name]["county"] = county
+            DB[name]["records"].append({
+                "date": date_fmt, "phone": phone,
+                "contact": contact, "unit": unit, "county": county,
+                "type": mission_type
+            })
+
+            # 針對外接出勤計算時間統計
+            if mission_type == "outbound":
+                t_depart = _parse_dt(get_cell(row, "出發時間"))
+                t_arrive = _parse_dt(get_cell(row, "抵達他院時間"))
+                t_return = _parse_dt(get_cell(row, "回程時間"))
+
+                if t_depart and t_arrive and t_return:
+                    go_mins   = (t_arrive - t_depart).total_seconds() / 60
+                    stay_mins = (t_return - t_arrive).total_seconds() / 60
+                    if 0 < go_mins < 600 and 0 < stay_mins < 600:
+                        if name not in time_records:
+                            time_records[name] = []
+                        time_records[name].append({"go": go_mins, "stay": stay_mins, "date": date_fmt})
+
+    # 執行資料處理 (注意：第二個參數為表單中的醫院欄位名稱)
+    process_data(outbound_rows, "轉出院所名稱", "outbound")
+    process_data(transfer_rows, "轉回院所名稱", "transfer")
 
     # 按日期降序排列
     for name in DB:
@@ -164,6 +193,7 @@ async def get_hospital_data():
     # 建立 TIME_DB
     TIME_DB: Dict[str, Any] = {}
     for name, entries in time_records.items():
+        if not entries: continue
         go_list   = [e["go"]   for e in entries]
         stay_list = [e["stay"] for e in entries]
         max_entry = max(entries, key=lambda e: e["stay"])
@@ -174,27 +204,21 @@ async def get_hospital_data():
             "max_stay_date": max_entry["date"],
         }
 
-    total_missions  = sum(v["count"] for v in DB.values())
+    total_missions  = outbound_count + transfer_count
     total_hospitals = len(DB)
     counties        = {v["county"] for v in DB.values() if v["county"]}
 
-    all_dates = sorted(
-        r["date"] for v in DB.values() for r in v["records"] if r["date"] >= "2000"
-    )
-    years_span = 0
-    if len(all_dates) >= 2:
-        try:
-            oldest = datetime.strptime(all_dates[0],  "%Y-%m-%d")
-            newest = datetime.strptime(all_dates[-1], "%Y-%m-%d")
-            years_span = max(1, round((newest - oldest).days / 365))
-        except Exception:
-            pass
+    # 防呆機制：只採計 2019 到 2030 年的資料，避免人為輸入錯字導致年份暴增
+    valid_years = {r["date"][:4] for v in DB.values() for r in v["records"] if "2019" <= r["date"][:4] <= "2030"}
+    years_span = max(1, len(valid_years))
 
     result = {
         "DB": DB,
         "TIME_DB": TIME_DB,
         "stats": {
             "total_missions":  total_missions,
+            "outbound_missions": outbound_count,
+            "transfer_missions": transfer_count,
             "total_hospitals": total_hospitals,
             "total_counties":  len(counties),
             "years_span":      years_span,
@@ -203,7 +227,7 @@ async def get_hospital_data():
 
     cached_hospital_data = result
     hospital_cache_time  = time.time()
-    print(f"[hospital] ✅ 快取已更新了：{total_missions} 筆，{total_hospitals} 家")
+    print(f"[hospital] ✅ 快取已更新：總共 {total_missions} 筆 (外接 {outbound_count}, 轉出 {transfer_count})，{total_hospitals} 家")
     return result
 
 
