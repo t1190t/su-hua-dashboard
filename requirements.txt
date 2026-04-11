@@ -6,3 +6,5 @@ urllib3
 pytz
 beautifulsoup4
 lxml
+gspread
+google-auth
