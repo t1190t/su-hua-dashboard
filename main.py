@@ -589,6 +589,7 @@ LINE_SECRET = os.environ.get('LINE_CHANNEL_SECRET', '')
 
 # 暫存群組 ID（重啟後會消失，等你確認 ID 後會改成固定值）
 detected_group_ids = []
+LINE_GROUP_ID = os.environ.get('LINE_GROUP_ID', 'Ce1dcf2f5cb1a781fb1af16402aa17853')
 
 @app.post("/webhook")
 async def line_webhook(request: Request):
@@ -632,7 +633,7 @@ async def line_notify(request: Request):
     notes       = data.get('notes', '')
     time_str    = data.get('time_str', '')
     dashboard_url = data.get('dashboard_url', '')
-    group_id    = data.get('group_id', '')
+    group_id    = data.get('group_id', '') or LINE_GROUP_ID
 
     if not group_id:
         return {"error": "group_id 未提供"}
