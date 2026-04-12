@@ -207,24 +207,20 @@ async def get_hospital_data():
     valid_years = {r["date"][:4] for v in DB.values() for r in v["records"] if "2019" <= r["date"][:4] <= "2030"}
     years_span = max(1, len(valid_years))
 
-    all_outbound_dates = [
-        r["date"] for v in DB.values()
-        for r in v["records"]
-        if r.get("type") == "outbound" and r.get("date") and len(r["date"]) >= 8
-    ]
-    last_outbound_date = max(all_outbound_dates) if all_outbound_dates else ""
+    all_dates = [r["date"] for v in DB.values() for r in v["records"] if r.get("date") and len(r["date"]) >= 10]
+    last_date = max(all_dates) if all_dates else ""
 
     result = {
         "DB": DB,
         "TIME_DB": TIME_DB,
         "stats": {
-            "total_missions":  total_missions,
+            "total_missions":    total_missions,
             "outbound_missions": outbound_count,
             "transfer_missions": transfer_count,
-            "total_hospitals": total_hospitals,
-            "total_counties":  len(counties),
-            "years_span":      years_span,
-            "last_outbound_date": last_outbound_date,
+            "total_hospitals":   total_hospitals,
+            "total_counties":    len(counties),
+            "years_span":        years_span,
+            "last_date":         last_date,
         },
     }
 
