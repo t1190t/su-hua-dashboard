@@ -42,6 +42,9 @@ cached_hospital_data = None
 hospital_cache_time  = 0
 HOSPITAL_CACHE_SECONDS = 30 * 60
 
+# 轉診眼鏡連結（固定值，作為 fallback）
+DEFAULT_WEBEX_LINK = 'https://ntuhmeeting.webex.com/ntuhmeeting-tc/j.php?MTID=mefb688127166ca0e62fdf919ef00d469'
+
 
 # ─────────────────────────────────────────────
 # 雨量分級
@@ -107,7 +110,6 @@ async def get_hospital_data():
     outbound_rows = []
     transfer_rows = []
     
-    # 分別讀取兩個工作表
     try:
         ws_out = sh.worksheet("外接出勤")
         outbound_rows = ws_out.get_all_values()
@@ -125,7 +127,6 @@ async def get_hospital_data():
     outbound_count = 0
     transfer_count = 0
 
-    # 共用的資料處理函數
     def process_data(rows, hosp_col_name, mission_type):
         nonlocal outbound_count, transfer_count
         if len(rows) < 2:
@@ -152,7 +153,6 @@ async def get_hospital_data():
             date_fmt = _format_date(get_cell(row, "出勤日期"))
             county   = get_cell(row, "出勤縣市")
             unit     = get_cell(row, "轉出單位")
-            # 嘗試抓取電話，不同表單欄位名稱可能不同，容錯處理
             phone    = get_cell(row, "轉出醫院之電話") or get_cell(row, "轉回醫院之電話") or ""
             contact  = get_cell(row, "對方聯絡人") or ""
 
@@ -168,7 +168,6 @@ async def get_hospital_data():
                 "type": mission_type
             })
 
-            # 針對外接出勤計算時間統計
             if mission_type == "outbound":
                 t_depart = _parse_dt(get_cell(row, "出發時間"))
                 t_arrive = _parse_dt(get_cell(row, "抵達他院時間"))
@@ -182,15 +181,12 @@ async def get_hospital_data():
                             time_records[name] = []
                         time_records[name].append({"go": go_mins, "stay": stay_mins, "date": date_fmt})
 
-    # 執行資料處理 (注意：第二個參數為表單中的醫院欄位名稱)
     process_data(outbound_rows, "轉出院所名稱", "outbound")
     process_data(transfer_rows, "轉回院所名稱", "transfer")
 
-    # 按日期降序排列
     for name in DB:
         DB[name]["records"].sort(key=lambda r: r["date"], reverse=True)
 
-    # 建立 TIME_DB
     TIME_DB: Dict[str, Any] = {}
     for name, entries in time_records.items():
         if not entries: continue
@@ -208,7 +204,6 @@ async def get_hospital_data():
     total_hospitals = len(DB)
     counties        = {v["county"] for v in DB.values() if v["county"]}
 
-    # 防呆機制：只採計 2019 到 2030 年的資料，避免人為輸入錯字導致年份暴增
     valid_years = {r["date"][:4] for v in DB.values() for r in v["records"] if "2019" <= r["date"][:4] <= "2030"}
     years_span = max(1, len(valid_years))
 
@@ -587,7 +582,6 @@ import hmac, hashlib, base64
 LINE_TOKEN  = os.environ.get('LINE_CHANNEL_TOKEN', '')
 LINE_SECRET = os.environ.get('LINE_CHANNEL_SECRET', '')
 
-# 暫存群組 ID（重啟後會消失，等你確認 ID 後會改成固定值）
 detected_group_ids = []
 LINE_GROUP_ID = os.environ.get('LINE_GROUP_ID', 'Ce1dcf2f5cb1a781fb1af16402aa17853')
 
@@ -596,7 +590,6 @@ async def line_webhook(request: Request):
     body_bytes = await request.body()
     body_str   = body_bytes.decode('utf-8')
 
-    # 驗證簽名（確認真的是 LINE 發來的）
     signature = request.headers.get('X-Line-Signature', '')
     hash_val  = hmac.new(LINE_SECRET.encode(), body_bytes, hashlib.sha256).digest()
     expected  = base64.b64encode(hash_val).decode()
@@ -618,7 +611,6 @@ async def line_webhook(request: Request):
 
 @app.get("/api/line-groupids")
 async def get_group_ids():
-    """暫時用來查看偵測到的群組 ID"""
     return {"group_ids": detected_group_ids}
 
 
@@ -627,27 +619,46 @@ async def line_notify(request: Request):
     if not LINE_TOKEN:
         return {"error": "LINE_CHANNEL_TOKEN 未設定"}
 
-    data        = await request.json()
-    hospital    = data.get('hospital', '')
-    task_type   = data.get('task_type', '')
-    notes       = data.get('notes', '')
-    time_str    = data.get('time_str', '')
+    data          = await request.json()
+    hospital      = data.get('hospital', '')
+    task_type     = data.get('task_type', '')
+    notes         = data.get('notes', '')
+    time_str      = data.get('time_str', '')
     dashboard_url = data.get('dashboard_url', '')
-    group_id    = data.get('group_id', '') or LINE_GROUP_ID
+    eta_text      = data.get('eta_text', '')          # 新增：ETA 文字
+    webex_link    = data.get('webex_link', DEFAULT_WEBEX_LINK)  # 新增：眼鏡連結
+    group_id      = data.get('group_id', '') or LINE_GROUP_ID
 
     if not group_id:
         return {"error": "group_id 未提供"}
 
+    # ── 組合 LINE 訊息 ──
     lines = [
         "🚑 台大兒童醫院 出勤通知",
         "",
         f"任務類型：{'🔵 外接任務' if task_type == '外接' else '🟠 轉出任務'}",
+    ]
+
+    # 若有 ETA 則加在任務類型下方
+    if eta_text:
+        lines.append(f"預計車程：{eta_text}（台大兒童 → 目的地）")
+
+    lines += [
         f"出勤地點：{hospital}",
         f"出勤時間：{time_str}",
     ]
+
     if notes:
         lines += ["", "病人概況：", notes]
-    lines += ["", "📊 即時資訊 Dashboard：", dashboard_url]
+
+    lines += [
+        "",
+        "📊 即時資訊 Dashboard：",
+        dashboard_url,
+        "",
+        "📹 轉診眼鏡連結：",
+        webex_link,
+    ]
 
     message_text = "\n".join(lines)
 
