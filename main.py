@@ -577,3 +577,96 @@ def read_root():
 @app.head("/")
 def read_root_head():
     return Response(status_code=200)
+
+# ─────────────────────────────────────────────
+# LINE Bot
+# ─────────────────────────────────────────────
+from fastapi import Request
+import hmac, hashlib, base64
+
+LINE_TOKEN  = os.environ.get('LINE_CHANNEL_TOKEN', '')
+LINE_SECRET = os.environ.get('LINE_CHANNEL_SECRET', '')
+
+# 暫存群組 ID（重啟後會消失，等你確認 ID 後會改成固定值）
+detected_group_ids = []
+
+@app.post("/webhook")
+async def line_webhook(request: Request):
+    body_bytes = await request.body()
+    body_str   = body_bytes.decode('utf-8')
+
+    # 驗證簽名（確認真的是 LINE 發來的）
+    signature = request.headers.get('X-Line-Signature', '')
+    hash_val  = hmac.new(LINE_SECRET.encode(), body_bytes, hashlib.sha256).digest()
+    expected  = base64.b64encode(hash_val).decode()
+    if signature != expected:
+        return Response(status_code=403)
+
+    import json
+    data = json.loads(body_str)
+    for event in data.get('events', []):
+        source = event.get('source', {})
+        if source.get('type') == 'group':
+            gid = source.get('groupId', '')
+            if gid and gid not in detected_group_ids:
+                detected_group_ids.append(gid)
+                print(f"[LINE] 偵測到群組 ID：{gid}")
+
+    return {"status": "ok"}
+
+
+@app.get("/api/line-groupids")
+async def get_group_ids():
+    """暫時用來查看偵測到的群組 ID"""
+    return {"group_ids": detected_group_ids}
+
+
+@app.post("/api/line-notify")
+async def line_notify(request: Request):
+    if not LINE_TOKEN:
+        return {"error": "LINE_CHANNEL_TOKEN 未設定"}
+
+    data        = await request.json()
+    hospital    = data.get('hospital', '')
+    task_type   = data.get('task_type', '')
+    notes       = data.get('notes', '')
+    time_str    = data.get('time_str', '')
+    dashboard_url = data.get('dashboard_url', '')
+    group_id    = data.get('group_id', '')
+
+    if not group_id:
+        return {"error": "group_id 未提供"}
+
+    lines = [
+        "🚑 台大兒童醫院 出勤通知",
+        "",
+        f"任務類型：{'🔵 外接任務' if task_type == '外接' else '🟠 轉出任務'}",
+        f"出勤地點：{hospital}",
+        f"出勤時間：{time_str}",
+    ]
+    if notes:
+        lines += ["", "病人概況：", notes]
+    lines += ["", "📊 即時資訊 Dashboard：", dashboard_url]
+
+    message_text = "\n".join(lines)
+
+    try:
+        resp = requests.post(
+            "https://api.line.me/v2/bot/message/push",
+            headers={
+                "Authorization": f"Bearer {LINE_TOKEN}",
+                "Content-Type":  "application/json",
+            },
+            json={
+                "to": group_id,
+                "messages": [{"type": "text", "text": message_text}],
+            },
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            return {"status": "sent"}
+        else:
+            print(f"[LINE] 發訊息失敗：{resp.status_code} {resp.text}")
+            return {"error": resp.text}
+    except Exception as e:
+        return {"error": str(e)}
