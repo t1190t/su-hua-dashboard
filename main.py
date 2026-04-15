@@ -43,7 +43,7 @@ hospital_cache_time  = 0
 HOSPITAL_CACHE_SECONDS = 30 * 60
 
 # 轉診眼鏡連結（固定值，作為 fallback）
-DEFAULT_WEBEX_LINK = 'https://tinyurl.com/3h8y6va5'
+DEFAULT_WEBEX_LINK = 'https://ntuhmeeting.webex.com/ntuhmeeting-tc/j.php?MTID=mefb688127166ca0e62fdf919ef00d469'
 
 
 # ─────────────────────────────────────────────
@@ -665,15 +665,18 @@ async def line_notify(request: Request):
 
     # 若有 ETA 則加在任務類型下方
     if eta_text:
-        lines.append(f"預計車程：{eta_text}（台大兒童 → 目的地）")
+        lines.append(f"⏱ 預計車程：{eta_text}（台大兒醫 → 目的地）")
 
     lines += [
-        f"出勤地點：{hospital}",
-        f"出勤時間：{time_str}",
+        f"🏥 出勤地點：{hospital}",
+        f"⏰ 出勤時間：{time_str}",
+        "──────────────────",
     ]
 
     if notes:
-        lines += ["", "病人概況：", notes]
+        lines += ["病人概況：", notes]
+    else:
+        lines.append("病人概況：（未填寫）")
 
     lines += [
         "",
