@@ -43,7 +43,24 @@ hospital_cache_time  = 0
 HOSPITAL_CACHE_SECONDS = 30 * 60
 
 # 轉診眼鏡連結（固定值，作為 fallback）
-DEFAULT_WEBEX_LINK = 'https://ntuhmeeting.webex.com/ntuhmeeting-tc/j.php?MTID=mefb688127166ca0e62fdf919ef00d469'
+DEFAULT_WEBEX_LINK = 'https://tinyurl.com/3h8y6va5'
+
+
+# ─────────────────────────────────────────────
+# TinyURL 縮網址（失敗時 fallback 原始網址）
+# ─────────────────────────────────────────────
+def shorten_url(long_url: str) -> str:
+    try:
+        resp = requests.get(
+            "https://tinyurl.com/api-create.php",
+            params={"url": long_url},
+            timeout=5,
+        )
+        if resp.status_code == 200 and resp.text.startswith("https://"):
+            return resp.text.strip()
+    except Exception as e:
+        print(f"[tinyurl] 縮網址失敗，使用原始網址：{e}")
+    return long_url
 
 
 # ─────────────────────────────────────────────
@@ -636,6 +653,9 @@ async def line_notify(request: Request):
     if not group_id:
         return {"error": "group_id 未提供"}
 
+    # ── 縮短 dashboard URL ──
+    short_url = shorten_url(dashboard_url) if dashboard_url else dashboard_url
+
     # ── 組合 LINE 訊息 ──
     lines = [
         "🚑 台大兒童醫院 出勤通知",
@@ -658,7 +678,7 @@ async def line_notify(request: Request):
     lines += [
         "",
         "📊 即時資訊 Dashboard：",
-        dashboard_url,
+        short_url,
         "",
         "📹 轉診眼鏡連結：",
         webex_link,
